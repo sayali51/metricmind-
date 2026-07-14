@@ -1,5 +1,3 @@
-cat > README.md << 'EOF'
-
 # MetricMind — Agentic Semantic BI Engine
 
 ## Domain
@@ -37,8 +35,3 @@ explanation using the same numbers Finance already trusts.
 ## Status
 
 In active development — Day 0 of 30. See `/docs/BUILD_LOG.md` for progress.
-
-## License
-
-MIT
-EOF
