@@ -1,53 +1,48 @@
-# MetricMind — Governed Metrics Chat
+# MetricMind — Governed Metrics Chat (Agentic BI)
 
 ## Domain
-
-Data Analytics & BI Governance
+Agentic AI & BI Governance
 
 ## Problem Statement
-
-Ad-hoc analysis often produces inconsistent numbers — the same metric
-("total sales," "profit margin") gets calculated slightly differently
-depending on who runs the query. MetricMind solves this by defining every
-business metric **once**, in one place, so any question about that metric
-always returns the same, correct answer.
+Giving an LLM raw access to a dataset to write its own queries often leads
+to inconsistent or wrong answers — the model may calculate the same metric
+("total sales," "profit margin") differently depending on how a question
+is phrased. MetricMind solves this with a governed metrics layer: the LLM
+never touches raw data directly. It can only call a fixed set of
+pre-defined, tested metric functions — so the answer to "what's total
+sales in the South?" is always calculated the same way, no matter who
+asks or how.
 
 ## Use Case
-
-A user asks MetricMind, _"What's total sales in the South region?"_ The
-app matches the question to a single governed metric function, runs it
-against the cleaned dataset, and returns a consistent answer — no matter
-how many times or in how many different phrasings the question is asked.
+A user asks MetricMind, *"What's total sales in the South region?"* A
+LangChain agent reads the question, decides which governed metric tool to
+call (it cannot invent its own calculation), executes it against the
+cleaned dataset, and returns a consistent, correct answer.
 
 ## Architecture
 
-This project is a practical, buildable implementation of the "semantic
-layer" concept used in enterprise BI tools (e.g., Cube.dev, dbt Semantic
-Layer): govern each metric's definition centrally, and let a query layer
-route natural language questions to it.
+| Layer | Purpose | Implementation |
+|---|---|---|
+| Semantic Layer | Single source of truth for every metric | `metrics/metrics.py` — one Python function per metric |
+| Agentic Orchestrator | Decides which metric to call from the question | `query_engine/query_engine.py` — real LangChain agent + LLM (OpenAI) |
+| Data Layer | Cleaned, structured dataset | `data/load_data.py` + CSV in `data/` |
+| Conversational BI Interface | Chat-style front end | `ui/app.py` — Streamlit |
 
-| Layer                       | Enterprise equivalent  | Our implementation                                           |
-| --------------------------- | ---------------------- | ------------------------------------------------------------ |
-| Semantic Layer              | Cube.dev / dbt         | `metrics/metrics.py` — one Python function per metric        |
-| Agentic Orchestrator        | LangChain + LLM        | `query_engine/query_engine.py` — question-to-metric matching |
-| Data Warehouse              | Snowflake / Databricks | Cleaned CSV loaded via Pandas (`data/`)                      |
-| Conversational BI Interface | Next.js + Tremor       | Streamlit chat app (`ui/app.py`)                             |
-
-The governance principle — one definition per metric, always consistent —
-is identical to the enterprise version. The infrastructure is scaled down
-to something a student project can realistically build, test, and explain
-end to end within a month.
+This follows the same governance principle as enterprise semantic-layer
+tools (e.g. Cube.dev + LangChain): the LLM orchestrates, but never
+calculates numbers itself — it always defers to a governed function.
 
 ## Project Structure
 
 ```
 metricmind-/
 ├── data/              # Load + clean the dataset
-├── metrics/           # Governed metric definitions
-├── query_engine/       # Natural language → metric routing
+├── metrics/           # Governed metric definitions (single source of truth)
+├── query_engine/      # LangChain agent — routes questions to metric tools
 ├── ui/                # Streamlit chat interface
-├── tests/             # Unit tests for metrics + query engine
+├── tests/             # Unit tests for metrics
 ├── docs_and_demo/     # Architecture notes + demo script
+├── .env               # API key (NOT committed — see .gitignore)
 └── requirements.txt
 ```
 
@@ -55,19 +50,56 @@ metricmind-/
 
 ```bash
 pip install -r requirements.txt
+```
+
+Create a `.env` file in the repo root (this file is git-ignored, never
+commit it):
+```
+OPENAI_API_KEY=your_key_here
+```
+
+Then run:
+```bash
 python data/load_data.py     # cleans and exports the dataset
 streamlit run ui/app.py      # launches the chat interface
 pytest tests/                # runs the test suite
 ```
 
+## Current Metrics Available
+
+- Total sales by region
+- Total sales by category
+- Total profit by region
+- Average profit margin
+- Count of high-value orders (sales >= 10,000)
+- Total order count
+
 ## Example Questions
 
 - "What's total sales in South?"
-- "Total sales for Electronics?"
+- "What's total profit in North?"
 - "What's the average profit margin?"
 - "How many high value orders are there?"
 
-## Status
+## Status / What's Done So Far
 
-In active development. See `docs_and_demo/ARCHITECTURE.md` for the full
-data flow and demo script.
+- ✅ Data cleaning pipeline (handles inconsistent spacing/casing)
+- ✅ Governed metric functions defined in `metrics.py`
+- ✅ Real LangChain agent implemented in `query_engine.py` (replaced
+  earlier keyword-matching prototype)
+- ✅ Streamlit chat UI working end to end
+- ✅ Unit tests passing for all metrics
+- 🔄 **In progress today**: swapping in a real Kaggle dataset (Superstore
+  Sales) to replace the small sample dataset — column names will change
+  slightly (e.g. `Sub-Category`, `Order Date`), so `load_data.py` and
+  `metrics.py` will need small updates to match. Whoever does this: please
+  post the new dataset's column names in the group chat before editing,
+  so we keep everyone's local copy in sync.
+
+## Notes for the Team
+
+- The LLM only ever calls the fixed tools listed in `query_engine.py` —
+  it cannot run arbitrary calculations. This is the core "governance"
+  concept the whole project demonstrates.
+- Never commit your `.env` file or API key. If you need your own key for
+  local testing, create your own `.env` — it won't be tracked by git.
