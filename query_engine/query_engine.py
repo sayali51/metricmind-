@@ -1,50 +1,72 @@
-"""
-Owner: Person 3 (query engine)
-
-This plays the role of the "agentic orchestrator" in the original spec —
-but instead of an LLM writing raw SQL, it does simple, transparent keyword
-matching to decide which governed metric function to call.
-"""
-
+import os
+from dotenv import load_dotenv
+from langchain_openai import ChatOpenAI
+from langchain.agents import initialize_agent, Tool, AgentType
 import pandas as pd
+
 from metrics.metrics import (
     total_sales_by_region,
     total_sales_by_category,
     high_value_orders,
     average_profit_margin,
     total_orders,
+    total_profit_by_region,
 )
 
-REGIONS = ["South", "North", "East", "West"]
-CATEGORIES = ["Electronics", "Furniture", "Office Supplies"]
+load_dotenv()
+
+
+def build_agent(df: pd.DataFrame):
+    """Builds a LangChain agent that can only call our governed metric tools."""
+
+    tools = [
+        Tool(
+            name="total_sales_by_region",
+            func=lambda region: str(total_sales_by_region(df, region.strip())),
+            description="Get total sales for a region. Input: region name (South, North, East, West).",
+        ),
+        Tool(
+            name="total_sales_by_category",
+            func=lambda category: str(total_sales_by_category(df, category.strip())),
+            description="Get total sales for a category. Input: category name (Electronics, Furniture, Office Supplies).",
+        ),
+        Tool(
+            name="total_profit_by_region",
+            func=lambda region: str(total_profit_by_region(df, region.strip())),
+            description="Get total profit for a region. Input: region name.",
+        ),
+        Tool(
+            name="average_profit_margin",
+            func=lambda _: str(average_profit_margin(df)),
+            description="Get the average profit margin across all orders. No input needed.",
+        ),
+        Tool(
+            name="high_value_orders_count",
+            func=lambda _: str(len(high_value_orders(df))),
+            description="Get the count of high-value orders (sales >= 10,000). No input needed.",
+        ),
+        Tool(
+            name="total_orders",
+            func=lambda _: str(total_orders(df)),
+            description="Get the total number of orders. No input needed.",
+        ),
+    ]
+
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+    agent = initialize_agent(
+        tools,
+        llm,
+        agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+        verbose=False,
+        handle_parsing_errors=True,
+    )
+    return agent
 
 
 def answer_question(question: str, df: pd.DataFrame) -> str:
-    q = question.lower()
-
-    for region in REGIONS:
-        if region.lower() in q and "sales" in q:
-            total = total_sales_by_region(df, region)
-            return f"Total sales in {region}: {total:,.0f}"
-
-    for category in CATEGORIES:
-        if category.lower() in q and "sales" in q:
-            total = total_sales_by_category(df, category)
-            return f"Total sales for {category}: {total:,.0f}"
-
-    if "margin" in q:
-        margin = average_profit_margin(df)
-        return f"Average profit margin: {margin:.2%}"
-
-    if "high value" in q or "high-value" in q:
-        orders = high_value_orders(df)
-        return f"{len(orders)} high-value orders (Sales >= 10,000)."
-
-    if "how many orders" in q or "total orders" in q:
-        return f"Total orders: {total_orders(df)}"
-
-    return (
-        "I don't have a governed metric for that question yet. "
-        "Try asking about sales by region/category, profit margin, "
-        "or high-value orders."
-    )
+    agent = build_agent(df)
+    try:
+        return agent.run(question)
+    except Exception as e:
+        return f"Couldn't process that question. Error: {e}"
