@@ -166,3 +166,5 @@ logs/
 .DS_Store
 .vscode/
 EOF
+
+.env
