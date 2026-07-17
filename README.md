@@ -36,7 +36,7 @@ calculates numbers itself — it always defers to a governed function.
 
 ```
 metricmind-/
-├── data/              # Load + clean the dataset
+├── data/              # Load + clean the dataset (Palmbridge sales data)
 ├── metrics/           # Governed metric definitions (single source of truth)
 ├── query_engine/      # LangChain agent — routes questions to metric tools
 ├── ui/                # Streamlit chat interface
@@ -73,6 +73,9 @@ pytest tests/                # runs the test suite
 - Average profit margin
 - Count of high-value orders (sales >= 10,000)
 - Total order count
+- **Discounted sales** — total sales value affected by discounts
+- **Segment-level metrics** — sales/profit broken down by customer segment
+- **Loss-order metric** — count/value of orders sold at a loss
 
 ## Example Questions
 
@@ -80,6 +83,9 @@ pytest tests/                # runs the test suite
 - "What's total profit in North?"
 - "What's the average profit margin?"
 - "How many high value orders are there?"
+- "What's total discounted sales?"
+- "How many orders were sold at a loss?"
+- "What's total sales for the Consumer segment?"
 
 ## Status / What's Done So Far
 
@@ -88,13 +94,15 @@ pytest tests/                # runs the test suite
 - ✅ Real LangChain agent implemented in `query_engine.py` (replaced
   earlier keyword-matching prototype)
 - ✅ Streamlit chat UI working end to end
-- ✅ Unit tests passing for all metrics
-- 🔄 **In progress today**: swapping in a real Kaggle dataset (Superstore
-  Sales) to replace the small sample dataset — column names will change
-  slightly (e.g. `Sub-Category`, `Order Date`), so `load_data.py` and
-  `metrics.py` will need small updates to match. Whoever does this: please
-  post the new dataset's column names in the group chat before editing,
-  so we keep everyone's local copy in sync.
+- ✅ **Migrated to the Palmbridge dataset** (replaced the earlier
+  Superstore sample) — `load_data.py`, `metrics.py`, and the test suite
+  have all been updated to match the new schema
+- ✅ Added three new governed metrics: discounted-sales, segment-level,
+  and loss-order
+- ✅ LangChain tools in `query_engine.py` updated so the agent can route
+  questions to the new metrics
+- ✅ Unit tests updated and passing against the Palmbridge schema
+  (`tests/test_metrics.py`)
 
 ## Notes for the Team
 
@@ -103,3 +111,9 @@ pytest tests/                # runs the test suite
   concept the whole project demonstrates.
 - Never commit your `.env` file or API key. If you need your own key for
   local testing, create your own `.env` — it won't be tracked by git.
+- **Pull before you push.** A few merge conflicts came up recently from
+  parallel edits to `README.md` and `data/`. If you're editing shared
+  files, run `git pull origin main` before you start and again right
+  before you push.
+- If you're unsure of the exact Palmbridge column names, check
+  `data/load_data.py` — it's the source of truth for the schema now.
