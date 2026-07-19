@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@cubejs-backend/sqlite-driver": "^1.7.4"
+  }
+}
