@@ -1,29 +1,123 @@
 cubes:
-  - name: orders
-    sql: >
-      SELECT 1 AS id, 100 AS amount, 'new' status
-      UNION ALL
-      SELECT 2 AS id, 200 AS amount, 'new' status
-      UNION ALL
-      SELECT 3 AS id, 300 AS amount, 'processed' status
-      UNION ALL
-      SELECT 4 AS id, 500 AS amount, 'processed' status
-      UNION ALL
-      SELECT 5 AS id, 600 AS amount, 'shipped' status
+  - name: sales
+    sql_table: sales
+    dimensions:
 
-    # Pre-aggregation definitions go here.
-    # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
-    # pre_aggregations:
+      - name: order_id
+        sql: "`Order ID`"
+        type: string
+        primary_key: true
+
+      - name: order_date
+        sql: "`Order Date`"
+        type: time
+
+      - name: ship_date
+        sql: "`Ship Date`"
+        type: time
+
+      - name: customer_segment
+        sql: "`Customer Segment`"
+        type: string
+
+      - name: region
+        sql: Region
+        type: string
+
+      - name: state
+        sql: State
+        type: string
+
+      - name: category
+        sql: Category
+        type: string
+
+      - name: sub_category
+        sql: "`Sub-Category`"
+        type: string
 
     measures:
-      - name: count
-        type: count
 
-      - name: total_amount
-        sql: amount
+      # Core Business Metrics
+   
+
+      - name: revenue
+        sql: Sales
         type: sum
 
-    dimensions:
-      - name: status
-        sql: status
-        type: string
+      - name: profit
+        sql: Profit
+        type: sum
+
+      - name: quantity
+        sql: Quantity
+        type: sum
+
+      - name: orders
+        type: count
+
+      - name: total_discount
+        sql: Discount
+        type: sum
+
+      - name: discounted_sales
+        sql: "`Discounted Sales`"
+        type: sum
+
+      - name: shipping_cost
+        sql: "`Shipping Cost`"
+        type: sum
+
+   
+      # Business KPIs
+   
+
+      - name: average_order_value
+        sql: Sales
+        type: avg
+
+      - name: average_profit
+        sql: Profit
+        type: avg
+
+      - name: average_discount
+        sql: Discount
+        type: avg
+
+      - name: average_shipping_cost
+        sql: "`Shipping Cost`"
+        type: avg
+
+   
+      # Operational KPIs
+      
+
+      - name: high_value_orders
+        type: count
+        filters:
+          - sql: "{CUBE}.Sales >= 10000"
+
+      - name: loss_orders
+        type: count
+        filters:
+          - sql: "{CUBE}.Profit < 0"
+
+      - name: profitable_orders
+        type: count
+        filters:
+          - sql: "{CUBE}.Profit > 0"
+
+      - name: discounted_orders
+        type: count
+        filters:
+          - sql: "{CUBE}.Discount > 0"
+
+   
+      # Financial KPIs
+   
+
+      - name: loss_value
+        sql: Sales
+        type: sum
+        filters:
+          - sql: "{CUBE}.Profit < 0"

@@ -1,23 +1,22 @@
 from pathlib import Path
-import sqlite3
 import pandas as pd
+from sqlalchemy import create_engine
 
 BASE_DIR = Path(__file__).parent
 
 csv_path = BASE_DIR / "data" / "palmbridge_raw_data.csv"
-db_path = BASE_DIR / "sales.db"
 
 df = pd.read_csv(csv_path)
 
-conn = sqlite3.connect(db_path)
+engine = create_engine(
+    "mysql+pymysql://root:hamza786110@localhost:3306/sales"
+)
 
 df.to_sql(
     "sales",
-    conn,
+    con=engine,
     if_exists="replace",
     index=False
 )
 
-conn.close()
-
-print("Database created!")
+print("Data loaded into MySQL successfully!")
