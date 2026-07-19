@@ -167,4 +167,4 @@ logs/
 .vscode/
 EOF
 
-.env
+.envdata/clean_sales.csv
