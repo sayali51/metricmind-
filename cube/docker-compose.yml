@@ -1,0 +1,28 @@
+version: '2.2'
+services:
+  cube:
+    image: cubejs/cube:v1.7.4
+    ports:
+      - 4000:4000
+      - 3000:3000
+    env_file: .env
+    volumes:
+      - .:/cube/conf
+      - .empty:/cube/conf/node_modules/@cubejs-backend/
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_DB: sales
+      POSTGRES_USER: cube
+      POSTGRES_PASSWORD: cube
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

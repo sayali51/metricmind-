@@ -1,0 +1,123 @@
+cubes:
+  - name: sales
+    sql_table: sales
+    dimensions:
+
+      - name: order_id
+        sql: "`Order ID`"
+        type: string
+        primary_key: true
+
+      - name: order_date
+        sql: "`Order Date`"
+        type: time
+
+      - name: ship_date
+        sql: "`Ship Date`"
+        type: time
+
+      - name: customer_segment
+        sql: "`Customer Segment`"
+        type: string
+
+      - name: region
+        sql: Region
+        type: string
+
+      - name: state
+        sql: State
+        type: string
+
+      - name: category
+        sql: Category
+        type: string
+
+      - name: sub_category
+        sql: "`Sub-Category`"
+        type: string
+
+    measures:
+
+      # Core Business Metrics
+   
+
+      - name: revenue
+        sql: Sales
+        type: sum
+
+      - name: profit
+        sql: Profit
+        type: sum
+
+      - name: quantity
+        sql: Quantity
+        type: sum
+
+      - name: orders
+        type: count
+
+      - name: total_discount
+        sql: Discount
+        type: sum
+
+      - name: discounted_sales
+        sql: "`Discounted Sales`"
+        type: sum
+
+      - name: shipping_cost
+        sql: "`Shipping Cost`"
+        type: sum
+
+   
+      # Business KPIs
+   
+
+      - name: average_order_value
+        sql: Sales
+        type: avg
+
+      - name: average_profit
+        sql: Profit
+        type: avg
+
+      - name: average_discount
+        sql: Discount
+        type: avg
+
+      - name: average_shipping_cost
+        sql: "`Shipping Cost`"
+        type: avg
+
+   
+      # Operational KPIs
+      
+
+      - name: high_value_orders
+        type: count
+        filters:
+          - sql: "{CUBE}.Sales >= 10000"
+
+      - name: loss_orders
+        type: count
+        filters:
+          - sql: "{CUBE}.Profit < 0"
+
+      - name: profitable_orders
+        type: count
+        filters:
+          - sql: "{CUBE}.Profit > 0"
+
+      - name: discounted_orders
+        type: count
+        filters:
+          - sql: "{CUBE}.Discount > 0"
+
+   
+      # Financial KPIs
+   
+
+      - name: loss_value
+        sql: Sales
+        type: sum
+        filters:
+          - sql: "{CUBE}.Profit < 0"

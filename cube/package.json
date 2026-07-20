@@ -1,0 +1,19 @@
+{
+  "name": "cube",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "cubejs-server"
+  },
+  "template": "docker",
+  "templateVersion": "1.7.4",
+  "devDependencies": {
+    "@cubejs-backend/mysql-driver": "^1.7.4",
+    "@cubejs-backend/postgres-driver": "^1.7.4",
+    "@cubejs-backend/server": "^1.7.4",
+    "@cubejs-backend/sqlite-driver": "^1.7.4"
+  },
+  "dependencies": {
+    "mysql2": "^3.23.1"
+  }
+}
