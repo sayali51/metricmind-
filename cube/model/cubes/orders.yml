@@ -2,122 +2,82 @@ cubes:
   - name: sales
     sql_table: sales
     dimensions:
-
       - name: order_id
-        sql: "`Order ID`"
+        sql: order_id
         type: string
         primary_key: true
-
       - name: order_date
-        sql: "`Order Date`"
+        sql: order_date
         type: time
-
       - name: ship_date
-        sql: "`Ship Date`"
+        sql: ship_date
         type: time
-
       - name: customer_segment
-        sql: "`Customer Segment`"
+        sql: customer_segment
         type: string
-
       - name: region
-        sql: Region
+        sql: region
         type: string
-
       - name: state
-        sql: State
+        sql: state
         type: string
-
       - name: category
-        sql: Category
+        sql: category
         type: string
-
       - name: sub_category
-        sql: "`Sub-Category`"
+        sql: sub_category
         type: string
-
     measures:
-
-      # Core Business Metrics
-   
-
       - name: revenue
-        sql: Sales
+        sql: sales
         type: sum
-
       - name: profit
-        sql: Profit
+        sql: profit
         type: sum
-
       - name: quantity
-        sql: Quantity
+        sql: quantity
         type: sum
-
       - name: orders
         type: count
-
       - name: total_discount
-        sql: Discount
+        sql: discount
         type: sum
-
       - name: discounted_sales
-        sql: "`Discounted Sales`"
+        sql: discounted_sales
         type: sum
-
       - name: shipping_cost
-        sql: "`Shipping Cost`"
+        sql: shipping_cost
         type: sum
-
-   
-      # Business KPIs
-   
-
       - name: average_order_value
-        sql: Sales
+        sql: sales
         type: avg
-
       - name: average_profit
-        sql: Profit
+        sql: profit
         type: avg
-
       - name: average_discount
-        sql: Discount
+        sql: discount
         type: avg
-
       - name: average_shipping_cost
-        sql: "`Shipping Cost`"
+        sql: shipping_cost
         type: avg
-
-   
-      # Operational KPIs
-      
-
       - name: high_value_orders
         type: count
         filters:
-          - sql: "{CUBE}.Sales >= 10000"
-
+          - sql: "{CUBE}.sales >= 10000"
       - name: loss_orders
         type: count
         filters:
-          - sql: "{CUBE}.Profit < 0"
-
+          - sql: "{CUBE}.profit < 0"
       - name: profitable_orders
         type: count
         filters:
-          - sql: "{CUBE}.Profit > 0"
-
+          - sql: "{CUBE}.profit > 0"
       - name: discounted_orders
         type: count
         filters:
-          - sql: "{CUBE}.Discount > 0"
-
-   
-      # Financial KPIs
-   
-
+          - sql: "{CUBE}.discount > 0"
       - name: loss_value
-        sql: Sales
+        sql: sales
         type: sum
         filters:
-          - sql: "{CUBE}.Profit < 0"
+          - sql: "{CUBE}.profit < 0"
