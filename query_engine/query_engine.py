@@ -1,69 +1,111 @@
-import json
-import pandas as pd
+import os
+import requests
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 
-from metrics.metrics import (
-    total_sales_by_region,
-    total_sales_by_category,
-    total_discounted_sales_by_region,
-    total_profit_by_region,
-    high_value_orders,
-    average_profit_margin,
-    total_orders,
-    total_sales_by_segment,
-    loss_making_orders_count,
-)
-
 load_dotenv()
 
+CUBE_API_URL = os.getenv("CUBE_API_URL", "http://localhost:4000/cubejs-api/v1/load")
+CUBE_API_TOKEN = os.getenv("CUBE_API_TOKEN", "")  # ask Hamza if auth is required
 
-def build_tools(df: pd.DataFrame):
+
+def query_cube(measures: list[str], filters: list[dict] = None) -> str:
+    """Send a query to Cube.dev's REST API and return the result as a string."""
+    payload = {"measures": measures}
+    if filters:
+        payload["filters"] = filters
+
+    headers = {}
+    if CUBE_API_TOKEN:
+        headers["Authorization"] = CUBE_API_TOKEN
+
+    try:
+        response = requests.post(
+            CUBE_API_URL, json={"query": payload}, headers=headers, timeout=15
+        )
+        response.raise_for_status()
+        data = response.json()["data"]
+        if not data:
+            return "0"
+        # Cube returns keys like "sales.revenue" — grab the first measure's value
+        first_row = data[0]
+        key = list(first_row.keys())[0]
+        return str(first_row[key])
+    except Exception as e:
+        return f"Cube query failed: {e}"
+
+
+def build_tools():
     @tool
     def tool_total_sales_by_region(region: str) -> str:
-        """Get total (pre-discount) sales for a region. Input: region name (North, South, East, West, Central)."""
-        return str(total_sales_by_region(df, region.strip().title()))
+        """Get total revenue for a region. Input: region name (North, South, East, West, Central)."""
+        return query_cube(
+            ["sales.revenue"],
+            [{"member": "sales.region", "operator": "equals", "values": [region.strip().title()]}],
+        )
 
     @tool
     def tool_total_sales_by_category(category: str) -> str:
-        """Get total sales for a category. Input: category name (Office Supplies, Technology, Furniture)."""
-        return str(total_sales_by_category(df, category.strip().title()))
+        """Get total revenue for a category. Input: category name (Office Supplies, Technology, Furniture)."""
+        return query_cube(
+            ["sales.revenue"],
+            [{"member": "sales.category", "operator": "equals", "values": [category.strip().title()]}],
+        )
 
     @tool
     def tool_total_discounted_sales_by_region(region: str) -> str:
         """Get total sales AFTER discount for a region. Input: region name."""
-        return str(total_discounted_sales_by_region(df, region.strip().title()))
+        return query_cube(
+            ["sales.discounted_sales"],
+            [{"member": "sales.region", "operator": "equals", "values": [region.strip().title()]}],
+        )
 
     @tool
     def tool_total_profit_by_region(region: str) -> str:
         """Get total profit for a region. Input: region name."""
-        return str(total_profit_by_region(df, region.strip().title()))
+        return query_cube(
+            ["sales.profit"],
+            [{"member": "sales.region", "operator": "equals", "values": [region.strip().title()]}],
+        )
 
     @tool
     def tool_average_profit_margin() -> str:
-        """Get the average profit margin across all orders."""
-        return str(average_profit_margin(df))
+        """Get average profit across all orders (Cube doesn't have a ratio metric defined yet, so this is average profit, not margin ratio)."""
+        return query_cube(["sales.average_profit"])
 
     @tool
     def tool_high_value_orders_count() -> str:
-        """Get the count of high-value orders (sales >= 3,000)."""
-        return str(len(high_value_orders(df)))
+        """Get the count of high-value orders (sales >= 10,000)."""
+        return query_cube(["sales.high_value_orders"])
 
     @tool
     def tool_total_orders() -> str:
         """Get the total number of orders."""
-        return str(total_orders(df))
+        return query_cube(["sales.orders"])
 
     @tool
     def tool_total_sales_by_segment(segment: str) -> str:
-        """Get total sales for a customer segment. Input: segment name (Consumer, Corporate, Home Office)."""
-        return str(total_sales_by_segment(df, segment.strip().title()))
+        """Get total revenue for a customer segment. Input: segment name (Consumer, Corporate, Home Office)."""
+        return query_cube(
+            ["sales.revenue"],
+            [{"member": "sales.customer_segment", "operator": "equals", "values": [segment.strip().title()]}],
+        )
 
     @tool
     def tool_loss_making_orders_count() -> str:
         """Get the count of orders that lost money (negative profit)."""
-        return str(loss_making_orders_count(df))
+        return query_cube(["sales.loss_orders"])
+
+    @tool
+    def tool_discounted_orders_count() -> str:
+        """Get the count of orders that had a discount applied."""
+        return query_cube(["sales.discounted_orders"])
+
+    @tool
+    def tool_total_loss_value() -> str:
+        """Get the total sales value from loss-making orders."""
+        return query_cube(["sales.loss_value"])
 
     return [
         tool_total_sales_by_region,
@@ -75,16 +117,17 @@ def build_tools(df: pd.DataFrame):
         tool_total_orders,
         tool_total_sales_by_segment,
         tool_loss_making_orders_count,
+        tool_discounted_orders_count,
+        tool_total_loss_value,
     ]
 
 
-def answer_question(question: str, df: pd.DataFrame) -> dict:
+def answer_question(question: str, df=None) -> dict:
     """
-    Uses native LLM tool-calling (no fragile agent framework). The LLM
-    picks ONE governed tool, we run it, and return the real number —
-    the LLM never calculates anything itself.
+    df parameter kept for compatibility with app.py's existing call signature,
+    but is now unused — Cube.dev is the data source instead of local Pandas.
     """
-    tools = build_tools(df)
+    tools = build_tools()
     tools_by_name = {t.name: t for t in tools}
 
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
