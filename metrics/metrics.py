@@ -20,10 +20,9 @@ def total_discounted_sales_by_region(df: pd.DataFrame, region: str) -> float:
     """
     return df.loc[df["Region"] == region, "Discounted Sales"].sum()
 
-
 def total_profit_by_region(df: pd.DataFrame, region: str) -> float:
     """Total profit for a given region."""
-    return df.loc[df["Region"] == region, "Profit"].sum()
+    return round(df.loc[df["Region"] == region, "Profit"].sum(), 2)
 
 
 def high_value_orders(df: pd.DataFrame, threshold: float = 3000) -> pd.DataFrame:
