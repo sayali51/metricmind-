@@ -94,15 +94,43 @@ CUBE_API_TOKEN=
 - "How many loss-making orders are there?"
 - "How many discounted orders are there?"
 
-## Status
+## Testing
+
+The project has two layers of automated tests:
+
+**Unit tests (fast, no setup needed):**
+```bash
+python -m pytest tests/ -v
+```
+Runs 14 tests instantly — covers the original Pandas metric functions
+(`test_metrics.py`) and the Cube.dev query logic (`test_query_engine.py`)
+using mocked HTTP responses, so no Docker/Cube/Postgres needs to be
+running.
+
+**Live integration tests (requires the full stack running):**
+```bash
+python -m pytest tests/test_query_engine.py -m live -v
+```
+Actually hits your running Cube instance at `localhost:4000` and confirms
+real data comes back correctly. Run this after `docker-compose up` + 
+seeding, especially after changing `orders.yml` or the Docker setup, to
+confirm the live connection still works end to end.
+
+Both test types are skippable independently — the default `pytest tests/`
+run never fails just because Docker isn't running, since live tests are
+excluded by default (configured in `pytest.ini`).
+
+## Status (updated)
 
 - ✅ Cube.dev semantic layer defined and running (Postgres-backed)
 - ✅ Fixed a real MySQL-vs-Postgres column syntax bug in `orders.yml`
 - ✅ LangChain + Groq agent connected to Cube's REST API — tested working
   end to end
-- ✅ Streamlit chat UI with governance audit trail (shows which metric
-  was used for every answer)
-- 🔄 Next: expand metric coverage, add margin ratio metric, polish UI
+- ✅ Streamlit chat UI with governance audit trail
+- ✅ **16/16 automated tests passing** — 14 unit tests (mocked, instant)
+  + 2 live integration tests (verified against the real running stack)
+- 🔄 Next: expand metric coverage (margin ratio), input guardrails,
+  friendlier error handling if Docker isn't running
 
 ## Notes for the Team
 
