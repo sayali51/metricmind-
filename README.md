@@ -131,11 +131,6 @@ excluded by default (configured in `pytest.ini`).
   + 2 live integration tests (verified against the real running stack)
 - 🔄 Next: expand metric coverage (margin ratio), input guardrails,
   friendlier error handling if Docker isn't running
-
-## Notes for the Team
-
-- `cube/.env` is git-ignored — each person needs their own copy locally
-  (same values should work for local dev).
 - Postgres data is **local to each machine's Docker volume** — after
   `docker-compose up`, you must run the seed step above once, or queries
   will return empty results.
