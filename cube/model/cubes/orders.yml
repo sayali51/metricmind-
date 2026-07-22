@@ -81,3 +81,7 @@ cubes:
         type: sum
         filters:
           - sql: "{CUBE}.profit < 0"
+      - name: profit_margin
+        sql: "SUM({CUBE}.profit) / NULLIF(SUM({CUBE}.sales), 0)"
+        type: number
+        format: percent

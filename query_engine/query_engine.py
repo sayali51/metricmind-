@@ -106,6 +106,11 @@ def build_tools():
     def tool_total_loss_value() -> str:
         """Get the total sales value from loss-making orders."""
         return query_cube(["sales.loss_value"])
+    
+    @tool
+    def tool_profit_margin() -> str:
+        """Get the overall profit margin as a ratio of total profit to total sales."""
+        return query_cube(["sales.profit_margin"])
 
     return [
         tool_total_sales_by_region,
