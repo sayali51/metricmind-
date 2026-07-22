@@ -82,7 +82,17 @@ def test_answer_question_no_tool_call():
     assert result["tool_used"] is None
     assert "not sure" in result["answer"].lower() or result["answer"]
 
+def test_answer_question_empty_input():
+    result = answer_question("")
+    assert result["tool_used"] is None
+    assert "enter a question" in result["answer"].lower()
 
+
+def test_answer_question_too_long():
+    result = answer_question("a" * 300)
+    assert result["tool_used"] is None
+    assert "too long" in result["answer"].lower()
+    
 # ---------------------------------------------------------------------
 # LIVE integration tests — require Docker + Cube + Postgres running
 # and seeded (see cube/seed.sql). Run with: pytest -m live -v
