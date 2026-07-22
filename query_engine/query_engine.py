@@ -128,10 +128,11 @@ def build_tools():
 
 
 def answer_question(question: str, df=None) -> dict:
-    """
-    df parameter kept for compatibility with app.py's existing call signature,
-    but is now unused — Cube.dev is the data source instead of local Pandas.
-    """
+    if not question or not question.strip():
+        return {"answer": "Please enter a question.", "tool_used": None}
+    if len(question) > 200:
+        return {"answer": "Question too long — please ask something shorter and more specific.", "tool_used": None}
+
     tools = build_tools()
     tools_by_name = {t.name: t for t in tools}
 
