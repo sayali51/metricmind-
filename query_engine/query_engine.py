@@ -28,13 +28,13 @@ def query_cube(measures: list[str], filters: list[dict] = None) -> str:
         data = response.json()["data"]
         if not data:
             return "0"
-        # Cube returns keys like "sales.revenue" — grab the first measure's value
         first_row = data[0]
         key = list(first_row.keys())[0]
         return str(first_row[key])
+    except requests.exceptions.ConnectionError:
+        return "Cube.dev isn't reachable — make sure Docker is running (docker-compose up in the cube/ folder)."
     except Exception as e:
         return f"Cube query failed: {e}"
-
 
 def build_tools():
     @tool
