@@ -124,6 +124,7 @@ def build_tools():
         tool_loss_making_orders_count,
         tool_discounted_orders_count,
         tool_total_loss_value,
+        tool_profit_margin,
     ]
 
 
@@ -156,11 +157,3 @@ def answer_question(question: str, df=None) -> dict:
     except Exception as e:
         return {"answer": f"Couldn't process that question. Error: {e}", "tool_used": None}
     
-def answer_question(question: str, df=None) -> dict:
-    if not question or not question.strip():
-        return {"answer": "Please enter a question.", "tool_used": None}
-    if len(question) > 200:
-        return {"answer": "Question too long — please ask something shorter and more specific.", "tool_used": None}
-
-    tools = build_tools()
-    # ...rest of your existing function continues unchanged below
