@@ -56,6 +56,20 @@ def test_query_cube_handles_empty_data():
     assert result == "0"
 
 
+def test_query_cube_preserves_explicit_empty_filters():
+    """If filters is explicitly an empty list, query_cube should include it in the request payload."""
+    fake_response = MagicMock()
+    fake_response.json.return_value = {"data": [{"sales.revenue": "100.0"}]}
+    fake_response.raise_for_status.return_value = None
+
+    with patch("query_engine.query_engine.requests.post", return_value=fake_response) as mock_post:
+        result = query_cube(["sales.revenue"], [])
+
+    assert result == "100.0"
+    sent_payload = mock_post.call_args.kwargs["json"]["query"]
+    assert sent_payload["filters"] == []
+
+
 def test_query_cube_handles_connection_error():
     """If Cube/Docker isn't running, query_cube should return a readable error, not crash."""
     with patch(
