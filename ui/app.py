@@ -73,7 +73,7 @@ default_value = st.session_state.pop("pending_question", "")
 question = st.text_input("Ask a question:", value=default_value)
 run_clicked = st.button("Run Query", type="primary")
 
-if run_clicked and question.strip():
+if run_clicked and question and question.strip():
     with st.spinner("Thinking..."):
         result = answer_question(question)
     st.session_state.history.append((question, result))
