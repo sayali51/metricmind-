@@ -1,4 +1,6 @@
 import os
+from typing import Optional
+
 import requests
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
@@ -9,11 +11,10 @@ load_dotenv()
 CUBE_API_URL = os.getenv("CUBE_API_URL", "http://localhost:4000/cubejs-api/v1/load")
 CUBE_API_TOKEN = os.getenv("CUBE_API_TOKEN", "")  # ask Hamza if auth is required
 
-
-def query_cube(measures: list[str], filters: list[dict] = None) -> str:
+def query_cube(measures: list[str], filters: Optional[list[dict]] = None) -> str:
     """Send a query to Cube.dev's REST API and return the result as a string."""
-    payload = {"measures": measures}
-    if filters:
+    payload: dict = {"measures": measures}
+    if filters is not None:
         payload["filters"] = filters
 
     headers = {}
@@ -32,7 +33,7 @@ def query_cube(measures: list[str], filters: list[dict] = None) -> str:
         key = list(first_row.keys())[0]
         return str(first_row[key])
     except requests.exceptions.ConnectionError:
-        return "Cube.dev isn't reachable — make sure Docker is running (docker-compose up in the cube/ folder)."
+        return "Cube query failed: Cube.dev isn't reachable — make sure Docker is running (docker-compose up in the cube/ folder)."
     except Exception as e:
         return f"Cube query failed: {e}"
 
@@ -124,6 +125,7 @@ def build_tools():
         tool_loss_making_orders_count,
         tool_discounted_orders_count,
         tool_total_loss_value,
+        tool_profit_margin,
     ]
 
 
@@ -156,11 +158,3 @@ def answer_question(question: str, df=None) -> dict:
     except Exception as e:
         return {"answer": f"Couldn't process that question. Error: {e}", "tool_used": None}
     
-def answer_question(question: str, df=None) -> dict:
-    if not question or not question.strip():
-        return {"answer": "Please enter a question.", "tool_used": None}
-    if len(question) > 200:
-        return {"answer": "Question too long — please ask something shorter and more specific.", "tool_used": None}
-
-    tools = build_tools()
-    # ...rest of your existing function continues unchanged below
