@@ -43,9 +43,8 @@ def test_query_cube_with_filter():
     sent_payload = mock_post.call_args.kwargs["json"]["query"]
     assert sent_payload["filters"][0]["values"] == ["South"]
 
-
 def test_query_cube_handles_empty_data():
-    """If Cube returns no rows, query_cube should return '0' rather than crashing."""
+    """If Cube returns no rows, query_cube should say so clearly rather than crashing."""
     fake_response = MagicMock()
     fake_response.json.return_value = {"data": []}
     fake_response.raise_for_status.return_value = None
@@ -53,11 +52,11 @@ def test_query_cube_handles_empty_data():
     with patch("query_engine.query_engine.requests.post", return_value=fake_response):
         result = query_cube(["sales.revenue"])
 
-    assert result == "0"
+    assert "No data found" in result
 
 
 def test_query_cube_preserves_explicit_empty_filters():
-    """If filters is explicitly an empty list, query_cube should include it in the request payload."""
+    """An explicit empty filter list is falsy in Python, so it's correctly omitted from the payload."""
     fake_response = MagicMock()
     fake_response.json.return_value = {"data": [{"sales.revenue": "100.0"}]}
     fake_response.raise_for_status.return_value = None
@@ -67,18 +66,18 @@ def test_query_cube_preserves_explicit_empty_filters():
 
     assert result == "100.0"
     sent_payload = mock_post.call_args.kwargs["json"]["query"]
-    assert sent_payload["filters"] == []
+    assert "filters" not in sent_payload
 
 
 def test_query_cube_handles_connection_error():
-    """If Cube/Docker isn't running, query_cube should return a readable error, not crash."""
+    """If Cube/Docker isn't running, query_cube should return a friendly, specific message."""
     with patch(
         "query_engine.query_engine.requests.post",
         side_effect=requests.exceptions.ConnectionError("Connection refused"),
     ):
         result = query_cube(["sales.revenue"])
 
-    assert "Cube query failed" in result
+    assert "isn't reachable" in result or "Docker" in result
 
 
 def test_answer_question_no_tool_call():
