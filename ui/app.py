@@ -26,13 +26,15 @@ EXAMPLE_QUESTIONS = [
     "What's the overall profit margin?",
 ]
 
+def set_question(q):
+    st.session_state["question_input"] = q
+
 with st.sidebar:
     st.header("📊 MetricMind")
     st.caption("Governed metrics chat, powered by Cube.dev + LangChain")
     st.subheader("Try asking:")
     for q in EXAMPLE_QUESTIONS:
-        if st.button(q, use_container_width=True, key=f"sidebar_{q}"):
-            st.session_state["pending_question"] = q
+        st.button(q, use_container_width=True, key=f"sidebar_{q}", on_click=set_question, args=(q,))
     st.divider()
     st.subheader("How it works")
     st.markdown(
@@ -51,24 +53,18 @@ st.caption("Ask a business question. Every answer comes from one governed metric
 
 if "history" not in st.session_state:
     st.session_state.history = []
-if "current_question" not in st.session_state:
-    st.session_state.current_question = ""
 
-default_value = st.session_state.pop("pending_question", st.session_state.current_question)
-
-question = st.text_input("Ask a question:", value=default_value, key="question_input")
+question = st.text_input("Ask a question:", key="question_input")
 run_clicked = st.button("Run Query", type="primary")
 
 if run_clicked and question.strip():
-    st.session_state.current_question = question
     with st.spinner("Thinking..."):
         result = answer_question(question)
     st.session_state.history.append((question, result))
 
-if not st.session_state.history:
-    st.info("No questions yet — try one from the sidebar, or type your own above.")
+if st.session_state.history:
+    q, result = st.session_state.history[-1]
 
-for q, result in reversed(st.session_state.history):
     with st.chat_message("user"):
         st.markdown(q)
     with st.chat_message("assistant"):
@@ -82,3 +78,5 @@ for q, result in reversed(st.session_state.history):
         else:
             st.markdown(f"**{answer_text}**")
             st.caption(f"🔍 Calculated using governed metric: `{tool_used}`")
+else:
+    st.info("No questions yet — try one from the sidebar, or type your own above.")
