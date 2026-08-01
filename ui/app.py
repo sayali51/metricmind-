@@ -24,6 +24,8 @@ EXAMPLE_QUESTIONS = [
     "How many high value orders are there?",
     "How many loss-making orders are there?",
     "What's the overall profit margin?",
+    "What's the top-selling category?",
+    "Show me the monthly sales trend",
 ]
 
 def set_question(q):
