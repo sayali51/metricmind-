@@ -168,3 +168,4 @@ logs/
 EOF
 
 .envdata/clean_sales.csv
+data/clean_sales.csv
