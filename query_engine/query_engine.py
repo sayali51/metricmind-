@@ -11,11 +11,20 @@ load_dotenv()
 CUBE_API_URL = os.getenv("CUBE_API_URL", "http://localhost:4000/cubejs-api/v1/load")
 CUBE_API_TOKEN = os.getenv("CUBE_API_TOKEN", "")  # ask Hamza if auth is required
 
-def query_cube(measures: list[str], filters: Optional[list[dict]] = None) -> str:
-    """Send a query to Cube.dev's REST API and return the result as a string."""
-    payload: dict = {"measures": measures}
-    if filters is not None:
+def query_cube(measures: list, filters: list = None, dimensions: list = None,
+                time_dimension: dict = None, order: dict = None, limit: int = None) -> str:
+    """Send a query to Cube.dev's REST API and return a readable string result."""
+    payload = {"measures": measures}
+    if filters:
         payload["filters"] = filters
+    if dimensions:
+        payload["dimensions"] = dimensions
+    if time_dimension:
+        payload["timeDimensions"] = [time_dimension]
+    if order:
+        payload["order"] = order
+    if limit:
+        payload["limit"] = limit
 
     headers = {}
     if CUBE_API_TOKEN:
@@ -28,16 +37,46 @@ def query_cube(measures: list[str], filters: Optional[list[dict]] = None) -> str
         response.raise_for_status()
         data = response.json()["data"]
         if not data:
-            return "0"
-        first_row = data[0]
-        key = list(first_row.keys())[0]
-        return str(first_row[key])
+            return "No data found for that query."
+
+        # Single-row, single-measure queries (most of our existing tools)
+        if len(data) == 1 and len(data[0]) == 1:
+            key = list(data[0].keys())[0]
+            return str(data[0][key])
+
+        # Multi-row results (grouped by category, or a time series)
+        lines = []
+        for row in data:
+            lines.append(", ".join(f"{k.split('.')[-1]}: {v}" for k, v in row.items()))
+        return "; ".join(lines)
+
     except requests.exceptions.ConnectionError:
-        return "Cube query failed: Cube.dev isn't reachable — make sure Docker is running (docker-compose up in the cube/ folder)."
+        return "Cube.dev isn't reachable — make sure Docker is running (docker-compose up in the cube/ folder)."
     except Exception as e:
         return f"Cube query failed: {e}"
 
 def build_tools():
+
+    @tool
+    def tool_top_selling_category() -> str:
+        """Find which product category has the highest total revenue."""
+        return query_cube(
+            measures=["sales.revenue"],
+            dimensions=["sales.category"],
+            order={"sales.revenue": "desc"},
+            limit=1,
+        )
+
+    @tool
+    def tool_monthly_sales_trend() -> str:
+        """Get total sales broken down by month, to show a trend over time."""
+        return query_cube(
+            measures=["sales.revenue"],
+            filters=[{"member": "sales.order_date", "operator": "set"}],
+            time_dimension={"dimension": "sales.order_date", "granularity": "month"},
+            order={"sales.order_date": "asc"},
+        )
+    
     @tool
     def tool_total_sales_by_region(region: str) -> str:
         """Get total revenue for a region. Input: region name (North, South, East, West, Central)."""
@@ -126,14 +165,27 @@ def build_tools():
         tool_discounted_orders_count,
         tool_total_loss_value,
         tool_profit_margin,
+        tool_total_sales_by_region,
+        tool_total_sales_by_category,
+        tool_total_profit_by_region,
+        tool_high_value_orders_count,
+        tool_total_orders,
+        tool_loss_making_orders_count,
+        tool_top_selling_category,
+        tool_monthly_sales_trend,
     ]
+
 
 
 def answer_question(question: str, df=None) -> dict:
     if not question or not question.strip():
-        return {"answer": "Please enter a question.", "tool_used": None}
+        return {"answer": "Please enter a question.", "tool_used": None, "trace": []}
     if len(question) > 200:
-        return {"answer": "Question too long — please ask something shorter and more specific.", "tool_used": None}
+        return {
+            "answer": "Question too long — please ask something shorter and more specific.",
+            "tool_used": None,
+            "trace": [],
+        }
 
     tools = build_tools()
     tools_by_name = {t.name: t for t in tools}
@@ -145,7 +197,11 @@ def answer_question(question: str, df=None) -> dict:
         response = llm_with_tools.invoke(question)
 
         if not response.tool_calls:
-            return {"answer": response.content or "I couldn't map that to a governed metric.", "tool_used": None}
+            return {
+                "answer": response.content or "I couldn't map that to a governed metric.",
+                "tool_used": None,
+                "trace": [],
+            }
 
         call = response.tool_calls[0]
         tool_name = call["name"]
@@ -153,8 +209,11 @@ def answer_question(question: str, df=None) -> dict:
 
         result = tools_by_name[tool_name].invoke(tool_args)
 
-        return {"answer": f"{result}", "tool_used": tool_name}
+        return {
+            "answer": f"{result}",
+            "tool_used": tool_name,
+            "trace": [{"name": tool_name, "args": tool_args, "result": str(result)}],
+        }
 
     except Exception as e:
-        return {"answer": f"Couldn't process that question. Error: {e}", "tool_used": None}
-    
+        return {"answer": f"Couldn't process that question. Error: {e}", "tool_used": None, "trace": []}
