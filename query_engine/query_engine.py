@@ -72,6 +72,7 @@ def build_tools():
         """Get total sales broken down by month, to show a trend over time."""
         return query_cube(
             measures=["sales.revenue"],
+            filters=[{"member": "sales.order_date", "operator": "set"}],
             time_dimension={"dimension": "sales.order_date", "granularity": "month"},
             order={"sales.order_date": "asc"},
         )
@@ -178,9 +179,13 @@ def build_tools():
 
 def answer_question(question: str, df=None) -> dict:
     if not question or not question.strip():
-        return {"answer": "Please enter a question.", "tool_used": None}
+        return {"answer": "Please enter a question.", "tool_used": None, "trace": []}
     if len(question) > 200:
-        return {"answer": "Question too long — please ask something shorter and more specific.", "tool_used": None}
+        return {
+            "answer": "Question too long — please ask something shorter and more specific.",
+            "tool_used": None,
+            "trace": [],
+        }
 
     tools = build_tools()
     tools_by_name = {t.name: t for t in tools}
@@ -192,7 +197,11 @@ def answer_question(question: str, df=None) -> dict:
         response = llm_with_tools.invoke(question)
 
         if not response.tool_calls:
-            return {"answer": response.content or "I couldn't map that to a governed metric.", "tool_used": None}
+            return {
+                "answer": response.content or "I couldn't map that to a governed metric.",
+                "tool_used": None,
+                "trace": [],
+            }
 
         call = response.tool_calls[0]
         tool_name = call["name"]
@@ -200,8 +209,11 @@ def answer_question(question: str, df=None) -> dict:
 
         result = tools_by_name[tool_name].invoke(tool_args)
 
-        return {"answer": f"{result}", "tool_used": tool_name}
+        return {
+            "answer": f"{result}",
+            "tool_used": tool_name,
+            "trace": [{"name": tool_name, "args": tool_args, "result": str(result)}],
+        }
 
     except Exception as e:
-        return {"answer": f"Couldn't process that question. Error: {e}", "tool_used": None}
-    
+        return {"answer": f"Couldn't process that question. Error: {e}", "tool_used": None, "trace": []}
