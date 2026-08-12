@@ -152,6 +152,30 @@ def build_tools():
         """Get the overall profit margin as a ratio of total profit to total sales."""
         return query_cube(["sales.profit_margin"])
 
+    @tool
+    def tool_profit_margin() -> str:
+        """Get the overall profit margin as a percentage of revenue."""
+        return query_cube(["sales.profit_margin"])
+
+    @tool
+    def tool_discount_rate() -> str:
+        """Get the overall discount rate as a percentage of revenue."""
+        return query_cube(["sales.discount_rate"])
+
+    @tool
+    def tool_shipping_cost_ratio() -> str:
+        """Get shipping cost as a percentage of revenue."""
+        return query_cube(["sales.shipping_cost_ratio"])
+
+    @tool
+    def tool_revenue_per_order() -> str:
+        """Get average revenue per order."""
+        return query_cube(["sales.revenue_per_order"])
+
+    @tool
+    def tool_profit_per_order() -> str:
+        """Get average profit per order."""
+        return query_cube(["sales.profit_per_order"])
     return [
         tool_total_sales_by_region,
         tool_total_sales_by_category,
