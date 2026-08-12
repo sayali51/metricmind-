@@ -168,11 +168,12 @@ with tab_dashboard:
         st.error(f"⚠️ Couldn't load dashboard data — is Cube.dev running? ({e})")
 
     if kpis:
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("Total Revenue", f"${kpis['revenue']:,.0f}")
         col2.metric("Total Profit", f"${kpis['profit']:,.0f}")
         col3.metric("Total Orders", f"{kpis['orders']:,}")
         col4.metric("High-Value Orders", f"{kpis['high_value_orders']:,}")
+        col5.metric("Profit Margin", f"{kpis['profit_margin']*100:.1f}%")
 
         st.write("")
         chart_col1, chart_col2 = st.columns(2)
