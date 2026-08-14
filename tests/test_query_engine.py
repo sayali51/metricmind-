@@ -128,3 +128,14 @@ def test_live_region_filtered_query():
     )
     assert "Cube query failed" not in result
     assert float(result) >= 0
+
+def test_query_cube_handles_ratio_metric():
+    """Ratio metrics (margin, discount rate) should parse the same way as sum metrics."""
+    fake_response = MagicMock()
+    fake_response.json.return_value = {"data": [{"sales.profit_margin": "0.1523"}]}
+    fake_response.raise_for_status.return_value = None
+
+    with patch("query_engine.query_engine.requests.post", return_value=fake_response):
+        result = query_cube(["sales.profit_margin"])
+
+    assert result == "0.1523"

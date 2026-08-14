@@ -81,7 +81,26 @@ cubes:
         type: sum
         filters:
           - sql: "{CUBE}.profit < 0"
+
       - name: profit_margin
         sql: "SUM({CUBE}.profit) / NULLIF(SUM({CUBE}.sales), 0)"
         type: number
         format: percent
+
+      - name: discount_rate
+        sql: "SUM({CUBE}.discount) / NULLIF(SUM({CUBE}.sales), 0)"
+        type: number
+        format: percent
+
+      - name: shipping_cost_ratio
+        sql: "SUM({CUBE}.shipping_cost) / NULLIF(SUM({CUBE}.sales), 0)"
+        type: number
+        format: percent
+
+      - name: revenue_per_order
+        sql: "SUM({CUBE}.sales) / NULLIF(COUNT(*), 0)"
+        type: number
+
+      - name: profit_per_order
+        sql: "SUM({CUBE}.profit) / NULLIF(COUNT(*), 0)"
+        type: number

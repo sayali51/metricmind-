@@ -1,181 +1,227 @@
-# MetricMind — Governed Metrics Chat (Agentic BI)
+# MetricMind — Governed Metrics Dashboard & Chat
 
 ## Domain
+
 Enterprise Analytics & Agentic AI
 
 ## Problem Statement
+
 Giving an LLM raw access to a data warehouse to write its own SQL often
-leads to hallucinated joins and inconsistent numbers. MetricMind solves
-this by having the LLM orchestrate against a governed **Cube.dev semantic
-layer** instead of writing raw SQL — every metric (revenue, profit,
-margin) is defined once, in one place, so the answer is always
-mathematically consistent no matter who asks or how.
+leads to hallucinated joins and inconsistent numbers — the same question
+can get different answers depending on phrasing. MetricMind solves this
+with a governed semantic layer: every business metric (revenue, profit,
+margin) is defined exactly once, and the AI can only _choose_ from these
+pre-approved, tested definitions — it never invents a calculation.
 
 ## Use Case
-A user asks MetricMind, *"What's total profit in North?"* A LangChain
-agent (running on Groq) reads the question, picks the correct governed
-metric tool, sends a query to Cube.dev's REST API, and returns the real,
-consistent number — the LLM never touches raw data or writes SQL itself.
 
-## Architecture (current, working end-to-end)
+A user opens MetricMind and sees a live dashboard of KPIs and charts
+built entirely from governed metrics. They can also ask a question in
+plain English — e.g. _"What's total profit in North?"_ — and a LangChain
+agent (running on Groq) picks the correct governed metric tool, queries
+Cube.dev's semantic layer, and returns a consistent, auditable answer.
 
-| Layer | Implementation |
-|---|---|
-| Semantic Layer | **Cube.dev** (`cube/model/cubes/orders.yml`) — governed metric/dimension definitions |
-| Data Warehouse | **Postgres**, running via Docker, seeded from the Palmbridge sales dataset |
-| Agentic Orchestrator | **LangChain + Groq** (`query_engine/query_engine.py`) — LLM picks a governed tool, never calculates numbers itself |
-| API Layer | **FastAPI** (`api/main.py`) — thin REST wrapper around the agent, exposing `POST /api/chat` |
-| Conversational Interface | **Next.js** (`web/`) — chat UI with full audit trail (shows which metric was used for every answer) |
+## Architecture
 
-The interface was migrated from an earlier Streamlit prototype (`ui/app.py`,
-kept for reference) to a Next.js frontend backed by FastAPI, without any
-changes to the underlying agent or semantic layer logic.
+```
+┌─────────────────────────────────────────┐
+│        Streamlit UI (dark themed)         │
+│   📈 Dashboard tab   💬 Chat tab          │
+└───────────────┬───────────────────────────┘
+                │
+     ┌──────────┴───────────┐
+     │                       │
+dashboard_data.py      query_engine.py
+(direct Cube queries    (LangChain + Groq
+ for charts/KPIs)        agent picks a tool)
+     │                       │
+     └──────────┬───────────┘
+                │
+        Cube.dev REST API
+     (governed semantic layer,
+      deployed on Cube Cloud)
+                │
+         Neon Postgres
+        (cloud-hosted, seeded)
+```
+
+| Layer          | Implementation                       | Why                                                                   |
+| -------------- | ------------------------------------ | --------------------------------------------------------------------- |
+| UI             | Streamlit, custom dark theme         | Dashboard + chat in one app                                           |
+| Orchestrator   | LangChain + Groq (Llama 3.3-70B)     | LLM only _selects_ a governed tool — never writes raw SQL             |
+| Semantic Layer | Cube.dev, deployed on **Cube Cloud** | Every metric defined exactly once — single source of truth            |
+| Data Warehouse | **Neon** (cloud-hosted Postgres)     | Real relational database, reachable from anywhere, not just localhost |
+
+## Deployment Status
+
+**Backend (Cube.dev + Postgres): fully cloud-deployed.**
+
+- Database: Neon (free-tier Postgres), seeded with the sales dataset
+- Semantic layer: Cube Cloud, connected to Neon
+- Verified working via direct REST API call (`curl`) and via the app's
+  own live integration tests — not just "it compiled," but confirmed
+  returning real data end to end
+
+**Frontend (Streamlit): currently local only.**
+Runs on `localhost:8501` for development/testing. Deploying it publicly
+(Streamlit Community Cloud) is a separate step — see below — that
+requires no backend changes, since the backend is already reachable
+over the internet.
 
 ## Project Structure
 
 ```
 metricmind-/
-├── api/                       # FastAPI wrapper around the LangChain agent
-│   └── main.py                # Exposes POST /api/chat, GET /api/health
-├── cube/                      # Cube.dev semantic layer
-│   ├── docker-compose.yml     # Postgres + Cube containers
-│   ├── model/cubes/orders.yml # Governed metric/dimension definitions
-│   └── seed.sql               # Loads the dataset into Postgres
-├── data/                      # Source CSV dataset
-├── query_engine/              # LangChain agent, queries Cube's REST API
-├── web/                       # Next.js chat interface (current UI)
-├── ui/                        # Earlier Streamlit chat interface (reference/rollback)
-├── metrics/, tests/           # Earlier local-Pandas prototype (kept for reference)
-└── docs_and_demo/             # Architecture notes
+├── .streamlit/
+│   └── config.toml            # Native dark theme config
+├── cube/                       # Cube.dev semantic layer (local dev copy)
+│   ├── docker-compose.yml      # Postgres + Cube containers (local fallback)
+│   ├── model/cubes/orders.yml  # Governed metric/dimension definitions
+│   └── seed.sql                # Loads the dataset into Postgres
+├── data/                       # Source CSV dataset
+├── query_engine/
+│   ├── query_engine.py         # LangChain agent — chat tools
+│   └── dashboard_data.py       # Direct Cube queries for dashboard charts/KPIs
+├── ui/
+│   └── app.py                  # Streamlit app — Dashboard + Chat tabs
+├── metrics/, tests/test_metrics.py   # Earlier local-Pandas prototype (reference only)
+├── tests/                       # Automated test suite
+└── docs_and_demo/
+    └── DEMO_SCRIPT.md           # Exact demo walkthrough
 ```
 
-## Setup (full stack, from scratch)
+## Setup — Option A: Use the deployed cloud backend (recommended, fastest)
 
-Three services run together: Docker (Postgres + Cube.dev), the FastAPI
-backend, and the Next.js frontend.
+No Docker needed. Just point at the live Cube Cloud deployment.
 
-**1. Start Cube + Postgres:**
+**1. Set your `.env`** (repo root):
+
+```
+GROQ_API_KEY=your_key_here
+CUBE_API_URL=https://harsh-gassaway.aws-us-west-2.cubecloudapp.dev/cubejs-api/v1/load
+CUBE_API_TOKEN=your_cube_cloud_api_token
+```
+
+(Get the token from Cube Cloud → your deployment → API Credentials →
+REST API tab → reveal token.)
+
+**2. Install dependencies and run:**
+
+```bash
+pip install -r requirements.txt
+pip install langchain-groq requests
+python -m streamlit run ui/app.py
+```
+
+That's it — no Postgres, no Docker, no seeding required, since the
+cloud database is already live and populated.
+
+## Setup — Option B: Full local stack (fallback, e.g. if cloud deployment is unavailable)
+
+**1. Start Cube + Postgres locally:**
+
 ```bash
 cd cube
-docker compose up
+docker-compose up
 ```
-Requires a `cube/.env` file (git-ignored — ask a teammate for the values,
-or use):
+
+Requires `cube/.env` (git-ignored):
+
 ```
+CUBEJS_DB_TYPE=postgres
 CUBEJS_DB_HOST=postgres
-CUBEJS_DB_PORT=5432
 CUBEJS_DB_NAME=sales
 CUBEJS_DB_USER=cube
 CUBEJS_DB_PASS=cube
-CUBEJS_DB_TYPE=postgres
 CUBEJS_API_SECRET=devsecret123
-CUBEJS_EXTERNAL_DEFAULT=true
-CUBEJS_SCHEDULED_REFRESH_DEFAULT=true
 CUBEJS_DEV_MODE=true
-CUBEJS_SCHEMA_PATH=model
 ```
-`CUBEJS_DB_HOST=postgres` and the `cube`/`cube` credentials match the
-`postgres` service defined in `docker-compose.yml` — these aren't personal
-credentials, they're fixed dev values for the containerized database.
 
-**2. Seed the database** (once, per machine — in a new terminal, from the
-project root):
+**2. Seed the database** (once per machine):
+
 ```bash
 docker cp data/raw_sales.csv cube-postgres-1:/raw_sales.csv
 docker exec -i cube-postgres-1 psql -U cube -d sales < cube/seed.sql
 ```
-On Windows PowerShell, use `Get-Content` instead of `<`:
-```powershell
-Get-Content cube/seed.sql | docker exec -i cube-postgres-1 psql -U cube -d sales
-```
 
-**3. Verify Cube is working:** open `http://localhost:4000`, run a test
-query on the `revenue` measure — should return a real number.
+**3. Point your root `.env` at localhost instead:**
 
-**4. Start the FastAPI backend** (from the project root, in a new terminal):
-```bash
-pip install -r requirements.txt
-pip install langchain-groq requests fastapi uvicorn
-python -m uvicorn api.main:app --reload --port 8000
 ```
-Requires a root-level `.env` with:
-```
-GROQ_API_KEY=your_key_here
 CUBE_API_URL=http://localhost:4000/cubejs-api/v1/load
 CUBE_API_TOKEN=
 ```
-Verify it's running: open `http://localhost:8000/api/health` — should
-return `{"status":"ok"}`.
 
-**5. Start the Next.js frontend** (in a new terminal):
-```bash
-cd web
-npm install
-cp .env.local.example .env.local
-npm run dev
-```
-Open `http://localhost:3000`. If Next.js starts on a different port
-(e.g. `3001`) because 3000 is already in use, either free up port 3000 or
-add the new port to `allow_origins` in `api/main.py`, since the backend's
-CORS settings only allow explicitly listed origins.
+**4. Run the app** as in Option A, step 2.
 
-## Example Questions
+## Features
 
-- "What's total sales in South?"
-- "What's total profit in North?"
-- "How many high value orders are there?"
-- "How many loss-making orders are there?"
-- "How many discounted orders are there?"
-- "What's the overall profit margin?"
-- "Why is profit low in the Central region?"
+**📈 Dashboard tab**
+
+- KPI cards: total revenue, profit, orders, high-value order count
+- Revenue by region, revenue by category (bar charts)
+- Monthly revenue trend (line chart)
+- All data pulled live from Cube.dev — nothing hardcoded
+
+**💬 Chat tab**
+
+- Ask any governed-metric question in plain English
+- Full audit trail — every answer shows exactly which governed metric
+  tool produced it
+- Input guardrails — empty or excessively long questions are rejected
+  before reaching the LLM
+- Graceful handling when Cube isn't reachable, or when a question can't
+  be mapped to any governed metric
+
+**Governed metrics currently defined**: revenue, profit, quantity, order
+count, discount totals/averages, discounted sales, shipping cost,
+average order value, average profit, high-value/loss/profitable/
+discounted order counts, loss value, profit margin, discount rate,
+shipping cost ratio, revenue per order, profit per order — 19 measures,
+each defined exactly once.
 
 ## Testing
 
-The project has two layers of automated tests:
-
 **Unit tests (fast, no setup needed):**
+
 ```bash
 python -m pytest tests/ -v
 ```
-Runs 14 tests instantly — covers the original Pandas metric functions
-(`test_metrics.py`) and the Cube.dev query logic (`test_query_engine.py`)
-using mocked HTTP responses, so no Docker/Cube/Postgres needs to be
-running.
 
-**Live integration tests (requires the full stack running):**
+**Live integration tests** (hits whichever Cube URL is set in `.env` —
+cloud or local, depending on your setup):
+
 ```bash
 python -m pytest tests/test_query_engine.py -m live -v
 ```
-Actually hits your running Cube instance at `localhost:4000` and confirms
-real data comes back correctly. Run this after `docker compose up` +
-seeding, especially after changing `orders.yml` or the Docker setup, to
-confirm the live connection still works end to end.
 
-Both test types are skippable independently — the default `pytest tests/`
-run never fails just because Docker isn't running, since live tests are
-excluded by default (configured in `pytest.ini`).
+## Status
 
-## Status (updated)
+- ✅ Cube.dev semantic layer — deployed on **Cube Cloud**, connected to
+  **Neon** (cloud Postgres), verified via curl and live tests
+- ✅ LangChain + Groq agent — connected to the deployed Cube REST API
+- ✅ Dashboard tab — live KPIs and charts
+- ✅ Chat tab — governed Q&A with audit trail and guardrails
+- ✅ Dark theme — native Streamlit theming + custom styling
+- ✅ Automated tests — unit (mocked) + live integration, all passing
+  against the cloud deployment
 
-- ✅ Cube.dev semantic layer defined and running (Postgres-backed)
-- ✅ Fixed a real MySQL-vs-Postgres config bug in `cube/.env` and
-  `orders.yml` column syntax
-- ✅ LangChain + Groq agent connected to Cube's REST API — tested working
-  end to end
-- ✅ FastAPI backend (`api/main.py`) exposing the agent as a REST endpoint
-- ✅ Next.js chat UI (`web/`) with governance audit trail — replaces the
-  earlier Streamlit prototype as the primary interface
-- ✅ Streamlit chat UI (`ui/app.py`) kept and still functional as a
-  fallback/reference
-- ✅ **16/16 automated tests passing** — 14 unit tests (mocked, instant)
-  + 2 live integration tests (verified against the real running stack)
-- 🔄 Next: expand metric coverage (margin ratio), input guardrails,
-  friendlier error handling if Docker isn't running, fix a display bug
-  where the "governed metric" count is sometimes off by one, dynamic
-  chart rendering, "view SQL/API call" transparency buttons
-- Postgres data is **local to each machine's Docker volume** — after
-  `docker compose up`, you must run the seed step above once, or queries
-  will return empty results.
-- `metrics/` and `tests/` contain an earlier local-Pandas prototype of
-  the same concept, kept for reference/comparison — the live app now
-  uses Cube.dev instead.
+## Notes for the Team
+
+- The cloud backend (Cube Cloud + Neon) is now the primary way to run
+  this app — no Docker required for day-to-day development.
+- Local Docker setup (Option B) remains as a fallback if the cloud
+  deployment has issues or access changes.
+- `.env` (root) and `cube/.env` are both git-ignored — get the current
+  cloud API token from whoever manages the Cube Cloud deployment.
+- `metrics/` and `tests/test_metrics.py` are the original local-Pandas
+  prototype from before the Cube.dev migration — kept as reference.
+
+## Scope note (for reviewers)
+
+The original brief specified Cube.dev/dbt + LangChain + Snowflake/
+Databricks + Next.js + Tremor. This implementation keeps the parts that
+define the project's core idea — a real, now cloud-deployed semantic
+layer (Cube.dev + Neon) and real agentic orchestration (LangChain) —
+and simplifies the frontend framework (Streamlit instead of Next.js/
+Tremor) to match the team's skillset and timeline. This is a deliberate,
+documented scope decision.
