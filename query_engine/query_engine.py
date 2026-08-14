@@ -102,11 +102,48 @@ def build_tools():
         )
 
     @tool
+    def tool_discount_by_state() -> str:
+        """Get average discount broken down by EVERY state, to compare or
+        visualize how discounting varies across states (e.g. "correlation
+        between state and discount", "discount by state", "which states get
+        the biggest discounts"). Returns the top 15 states by average discount."""
+        return query_cube(
+            measures=["sales.average_discount"],
+            dimensions=["sales.state"],
+            order={"sales.average_discount": "desc"},
+            limit=15,
+        )
+
+    @tool
     def tool_total_profit_by_region(region: str) -> str:
         """Get total profit for a region. Input: region name."""
         return query_cube(
             ["sales.profit"],
             [{"member": "sales.region", "operator": "equals", "values": [region.strip().title()]}],
+        )
+
+    @tool
+    def tool_sales_distribution_by_region() -> str:
+        """Get total sales broken down by EVERY region at once, for comparing or
+        visualizing the distribution of sales across all regions. Use this
+        (not tool_total_sales_by_region) whenever the user asks to see/compare
+        sales across regions rather than for one specific region."""
+        return query_cube(
+            measures=["sales.revenue"],
+            dimensions=["sales.region"],
+            order={"sales.revenue": "desc"},
+        )
+
+    @tool
+    def tool_profit_distribution_by_region() -> str:
+        """Get total profit broken down by EVERY region at once, for comparing or
+        visualizing the distribution of profit across all regions. Use this
+        (not tool_total_profit_by_region) whenever the user asks to see/compare
+        profit across regions rather than for one specific region."""
+        return query_cube(
+            measures=["sales.profit"],
+            dimensions=["sales.region"],
+            order={"sales.profit": "desc"},
         )
 
     @tool
@@ -181,6 +218,9 @@ def build_tools():
         tool_total_sales_by_category,
         tool_total_discounted_sales_by_region,
         tool_total_profit_by_region,
+        tool_sales_distribution_by_region,
+        tool_profit_distribution_by_region,
+        tool_discount_by_state,
         tool_average_profit_margin,
         tool_high_value_orders_count,
         tool_total_orders,
