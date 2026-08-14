@@ -86,11 +86,6 @@ cubes:
         type: number
         format: percent
 
-      - name: profit_margin
-        sql: "SUM({CUBE}.profit) / NULLIF(SUM({CUBE}.sales), 0)"
-        type: number
-        format: percent
-
       - name: discount_rate
         sql: "SUM({CUBE}.discount) / NULLIF(SUM({CUBE}.sales), 0)"
         type: number
