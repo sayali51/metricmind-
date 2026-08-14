@@ -23,6 +23,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from query_engine.query_engine import answer_question
+from query_engine.dashboard_data import (
+    get_kpi_summary,
+    get_revenue_by_region,
+    get_revenue_by_category,
+    get_monthly_revenue_trend,
+)
 
 app = FastAPI(title="MetricMind API")
 
@@ -59,9 +65,62 @@ class ChatResponse(BaseModel):
     trace: list[TraceStep]
 
 
+class ChartPoint(BaseModel):
+    label: str
+    value: float
+
+
+class DashboardResponse(BaseModel):
+    kpis: dict
+    revenue_by_region: list[ChartPoint]
+    revenue_by_category: list[ChartPoint]
+    monthly_revenue_trend: list[ChartPoint]
+    error: str | None = None
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+def _df_to_points(df, label_col: str, value_col: str) -> list[dict]:
+    """Convert a dashboard_data DataFrame (indexed by label_col) into
+    [{label, value}, ...] JSON points the frontend chart components expect."""
+    if df is None or df.empty:
+        return []
+    return [
+        {"label": str(idx), "value": float(row[value_col])}
+        for idx, row in df.iterrows()
+    ]
+
+
+@app.get("/api/dashboard", response_model=DashboardResponse)
+def dashboard():
+    """Aggregated data for the dashboard view: top KPI cards + three charts.
+    Always returns 200 — if Cube.dev is unreachable, `error` is set and every
+    other field comes back empty so the frontend can render a clear message
+    instead of a broken page.
+    """
+    try:
+        kpis = get_kpi_summary()
+        region_df = get_revenue_by_region()
+        category_df = get_revenue_by_category()
+        trend_df = get_monthly_revenue_trend()
+
+        return DashboardResponse(
+            kpis=kpis,
+            revenue_by_region=_df_to_points(region_df, "Region", "Revenue"),
+            revenue_by_category=_df_to_points(category_df, "Category", "Revenue"),
+            monthly_revenue_trend=_df_to_points(trend_df, "Month", "Revenue"),
+        )
+    except Exception as e:
+        return DashboardResponse(
+            kpis={},
+            revenue_by_region=[],
+            revenue_by_category=[],
+            monthly_revenue_trend=[],
+            error=f"Couldn't load dashboard data — is Cube.dev running? ({e})",
+        )
 
 
 @app.post("/api/chat", response_model=ChatResponse)
