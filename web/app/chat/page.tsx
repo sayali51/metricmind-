@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import {
   ResponsiveContainer,
   BarChart,
@@ -20,6 +19,7 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { Sidebar, Topbar, type AnchorItem } from "../components/Shell";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -56,6 +56,31 @@ const HOW_IT_WORKS = [
 ];
 
 const STACK = ["Cube.dev semantic layer", "LangChain + Groq agent", "FastAPI", "Next.js"];
+
+function IconInfo(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <circle cx="12" cy="12" r="9" fill="currentColor" opacity="0.15" />
+      <path d="M12 11v6M12 7.5v.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconAsk(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path
+        d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8A2.5 2.5 0 0 1 17.5 16H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 13.5v-8Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+const CHAT_ANCHOR_ITEMS: AnchorItem[] = [
+  { label: "How it works", href: "#how-it-works", icon: IconInfo },
+  { label: "Ask a question", href: "#ask", icon: IconAsk },
+];
 
 type TraceStep = {
   name: string;
@@ -342,6 +367,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [openTrace, setOpenTrace] = useState<number | null>(null);
   const [distributionViews, setDistributionViews] = useState<Record<number, "bar" | "pie">>({});
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   function previewSample(label: string, toolName: string, answer: string) {
     setHistory((prev) => [
@@ -402,37 +428,22 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-ledger-bg">
-      <div className="mx-auto max-w-3xl px-6 py-16">
-        {/* Header */}
-        <header className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <SealIcon verified />
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-seal-teal">
-                Governed metrics chat · Agentic BI
-              </p>
-            </div>
-            <Link
-              href="/"
-              className="text-xs font-mono text-ink-secondary hover:text-seal-teal transition-colors"
-            >
-              ← Dashboard
-            </Link>
-          </div>
-          <h1 className="font-display text-4xl font-semibold text-ink-primary mb-3">
-            MetricMind
-          </h1>
-          <p className="text-ink-secondary leading-relaxed max-w-xl">
-            Ask a business question in plain English and get back a number that's
-            always mathematically consistent — every answer is computed from one
-            governed metric definition in Cube.dev, never guessed by the LLM, with
-            a full audit trail underneath.
-          </p>
-        </header>
+    <div className="min-h-screen bg-ledger-bg flex">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} anchorItems={CHAT_ANCHOR_ITEMS} />
+
+      <div className="flex-1 min-w-0 flex flex-col">
+        <Topbar eyebrow="Agentic BI" title="Ask MetricMind" onMenuClick={() => setSidebarOpen(true)} />
+
+        <main className="flex-1 px-6 py-8 max-w-3xl w-full mx-auto">
+        <p className="text-ink-secondary leading-relaxed max-w-xl mb-8">
+          Ask a business question in plain English and get back a number that's
+          always mathematically consistent — every answer is computed from one
+          governed metric definition in Cube.dev, never guessed by the LLM, with
+          a full audit trail underneath.
+        </p>
 
         {/* How it works */}
-        <section className="mb-8 rounded-xl border border-ledger-border bg-ledger-card p-5">
+        <section id="how-it-works" className="mb-8 rounded-xl border border-ledger-border bg-ledger-card p-5">
           <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-muted mb-4">
             How it works
           </p>
@@ -459,11 +470,12 @@ export default function Home() {
 
         {/* Ask form */}
         <form
+          id="ask"
           onSubmit={(e) => {
             e.preventDefault();
             runQuery(question);
           }}
-          className="mb-4"
+          className="mb-4 scroll-mt-20"
         >
           <label htmlFor="question" className="sr-only">
             Ask a question
@@ -619,7 +631,8 @@ export default function Home() {
             );
           })}
         </div>
+        </main>
       </div>
-    </main>
+    </div>
   );
 }

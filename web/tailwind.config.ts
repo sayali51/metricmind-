@@ -23,6 +23,25 @@ const config: Config = {
           amber: "#BA7517",
           amberDark: "#854F0B",
         },
+        canvas: {
+          bg: "#F5F3FB",
+          card: "#FFFFFF",
+          border: "#ECE8F7",
+          line: "#F1EEFA",
+        },
+        brand: {
+          pink: "#FF3D77",
+          pinkDeep: "#D6215A",
+          violet: "#7C4DFF",
+          indigo: "#5B4FE9",
+          blue: "#3B82F6",
+          orange: "#FB923C",
+        },
+        dtext: {
+          primary: "#221935",
+          secondary: "#8D8AA3",
+          muted: "#B7B4C9",
+        },
       },
       fontFamily: {
         display: ["var(--font-fraunces)", "serif"],

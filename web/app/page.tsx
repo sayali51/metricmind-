@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
 } from "recharts";
+import { Sidebar, Topbar, type AnchorItem } from "./components/Shell";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -35,35 +36,7 @@ type DashboardData = {
   error: string | null;
 };
 
-const tooltipStyle = {
-  contentStyle: { background: "#181C25", border: "1px solid #262B36", borderRadius: 8, fontSize: 12 },
-  labelStyle: { color: "#9A9FAC" },
-  itemStyle: { color: "#EDECE6" },
-};
-
-function SealIcon({ verified }: { verified: boolean }) {
-  return (
-    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <polygon
-        points="17,1 24,4.5 30.5,10 32.5,17 30.5,24 24,29.5 17,33 10,29.5 3.5,24 1.5,17 3.5,10 10,4.5"
-        className={verified ? "fill-seal-teal/15 stroke-seal-teal" : "fill-ledger-card stroke-ledger-border"}
-        strokeWidth="1"
-      />
-      {verified ? (
-        <path
-          d="M11 17.5l4 4 8-8.5"
-          stroke="#1D9E75"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-      ) : (
-        <circle cx="17" cy="17" r="2.2" fill="#5B606C" />
-      )}
-    </svg>
-  );
-}
+const PALETTE = ["#1D9E75", "#BA7517", "#5B8DEF", "#B968E0", "#E0577B", "#3FB6C9"];
 
 function formatCurrency(n: number | undefined): string {
   if (n === undefined) return "—";
@@ -80,36 +53,61 @@ function formatPercent(n: number | undefined): string {
   return `${(n * 100).toFixed(1)}%`;
 }
 
-const KPI_CARDS: { key: keyof Kpis; label: string; format: (n: number | undefined) => string }[] = [
-  { key: "revenue", label: "Total Revenue", format: formatCurrency },
-  { key: "profit", label: "Total Profit", format: formatCurrency },
-  { key: "orders", label: "Total Orders", format: formatNumber },
-  { key: "high_value_orders", label: "High-Value Orders", format: formatNumber },
-  { key: "profit_margin", label: "Profit Margin", format: formatPercent },
+function IconTrend(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path d="M3 17l6-6 4 4 8-9" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconPin(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Z" fill="currentColor" />
+      <circle cx="12" cy="9" r="2.5" fill="#181C25" />
+    </svg>
+  );
+}
+
+function IconTag(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path d="M3 12.5 12.5 3H19a2 2 0 0 1 2 2v6.5L11.5 21 3 12.5Z" fill="currentColor" />
+      <circle cx="16" cy="8" r="1.6" fill="#181C25" />
+    </svg>
+  );
+}
+
+const ANCHOR_ITEMS: AnchorItem[] = [
+  { label: "Revenue trend", href: "#trend", icon: IconTrend },
+  { label: "Regional split", href: "#regional", icon: IconPin },
+  { label: "Categories", href: "#categories", icon: IconTag },
 ];
 
-function KpiCardSkeleton() {
+/* ------------------------------- Skeletons ------------------------------- */
+
+function CardSkeleton({ className = "" }: { className?: string }) {
   return (
-    <div className="rounded-xl border border-ledger-border bg-ledger-card p-5 animate-pulse">
-      <div className="h-3 w-20 bg-ledger-surface rounded mb-3" />
-      <div className="h-7 w-24 bg-ledger-surface rounded" />
+    <div className={`rounded-2xl border border-ledger-border bg-ledger-card p-5 animate-pulse ${className}`}>
+      <div className="h-3 w-24 bg-ledger-surface rounded mb-3" />
+      <div className="h-7 w-28 bg-ledger-surface rounded mb-4" />
+      <div className="h-40 rounded-xl bg-ledger-surface" />
     </div>
   );
 }
 
-function ChartCardSkeleton({ title }: { title: string }) {
-  return (
-    <div className="rounded-xl border border-ledger-border bg-ledger-card p-5">
-      <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-muted mb-4">{title}</p>
-      <div className="h-56 rounded-lg bg-ledger-surface animate-pulse" />
-    </div>
-  );
+function StatCardSkeleton() {
+  return <div className="rounded-2xl bg-ledger-card border border-ledger-border p-5 h-[104px] animate-pulse" />;
 }
+
+/* --------------------------------- Page --------------------------------- */
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,161 +142,229 @@ export default function DashboardPage() {
   const backendError = data?.error ?? null;
   const showError = fetchError || backendError;
   const kpis = data?.kpis ?? {};
-  const hasKpis = Object.keys(kpis).length > 0;
+
+  const categoryTotal = useMemo(
+    () => (data?.revenue_by_category ?? []).reduce((sum, p) => sum + p.value, 0),
+    [data]
+  );
+  const regionMax = useMemo(
+    () => Math.max(1, ...(data?.revenue_by_region ?? []).map((p) => p.value)),
+    [data]
+  );
+
+  const statCards = [
+    { label: "Total Revenue", value: formatCurrency(kpis.revenue) },
+    { label: "Total Profit", value: formatCurrency(kpis.profit) },
+    { label: "Total Orders", value: formatNumber(kpis.orders) },
+    { label: "Profit Margin", value: formatPercent(kpis.profit_margin) },
+  ];
 
   return (
-    <main className="min-h-screen bg-ledger-bg">
-      <div className="mx-auto max-w-5xl px-6 py-16">
-        {/* Header */}
-        <header className="mb-8 flex items-start justify-between gap-6 flex-wrap">
-          <div>
-            <div className="flex items-center gap-3 mb-4">
-              <SealIcon verified />
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-seal-teal">
-                Governed metrics dashboard · Agentic BI
-              </p>
+    <div className="min-h-screen bg-ledger-bg flex">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} anchorItems={ANCHOR_ITEMS} />
+
+      <div className="flex-1 min-w-0 flex flex-col">
+        <Topbar eyebrow="Agentic BI" title="Dashboard" onMenuClick={() => setSidebarOpen(true)} />
+
+        <main className="flex-1 px-5 py-6 max-w-6xl w-full mx-auto">
+          {showError && (
+            <div className="mb-5 rounded-xl border border-seal-amber/40 bg-seal-amber/10 px-4 py-3 text-sm text-seal-amber">
+              ⚠️ {fetchError || backendError}
             </div>
-            <h1 className="font-display text-4xl font-semibold text-ink-primary mb-3">
-              MetricMind
-            </h1>
-            <p className="text-ink-secondary leading-relaxed max-w-xl">
-              A live snapshot of the business, computed straight from the governed
-              metric definitions in Cube.dev — the same numbers the chat bot uses.
-            </p>
-          </div>
-        </header>
+          )}
 
-        {showError && (
-          <div className="mb-6 rounded-lg border border-seal-amber/40 bg-seal-amber/10 px-4 py-3 text-sm text-seal-amber">
-            ⚠️ {fetchError || backendError}
-          </div>
-        )}
-
-        {/* KPI cards */}
-        <section className="mb-6">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {loading
-              ? Array.from({ length: 5 }).map((_, i) => <KpiCardSkeleton key={i} />)
-              : hasKpis
-              ? KPI_CARDS.map((card) => (
-                  <div key={card.key} className="rounded-xl border border-ledger-border bg-ledger-card p-5">
-                    <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-muted mb-2">
-                      {card.label}
+          {/* Hero row: trend + category mix */}
+          <section id="trend" className="grid lg:grid-cols-[1.4fr_1fr] gap-4 mb-4">
+            {loading ? (
+              <CardSkeleton />
+            ) : (
+              <div className="rounded-2xl border border-ledger-border bg-ledger-card p-6">
+                <div className="flex items-start justify-between mb-5">
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-muted mb-1">
+                      Revenue overview
                     </p>
-                    <p className="font-display text-2xl font-semibold text-ink-primary">
-                      {card.format(kpis[card.key])}
+                    <p className="font-display text-3xl font-semibold text-ink-primary">
+                      {formatCurrency(kpis.revenue)}
+                    </p>
+                    <p className="text-sm text-ink-secondary mt-1">
+                      {formatNumber(kpis.orders)} orders across the period
                     </p>
                   </div>
-                ))
-              : !showError && (
-                  <div className="col-span-full rounded-xl border border-ledger-border bg-ledger-card p-5 text-sm text-ink-muted italic">
-                    No KPI data available yet.
-                  </div>
-                )}
-          </div>
-        </section>
+                  <span className="rounded-full bg-seal-teal/10 px-3 py-1 text-xs font-medium text-seal-teal">
+                    Monthly
+                  </span>
+                </div>
 
-        {/* Charts: region + category */}
-        <section className="mb-6 grid md:grid-cols-2 gap-4">
-          {loading ? (
-            <>
-              <ChartCardSkeleton title="Revenue by Region" />
-              <ChartCardSkeleton title="Revenue by Category" />
-            </>
-          ) : (
-            <>
-              <div className="rounded-xl border border-ledger-border bg-ledger-card p-5">
-                <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-muted mb-4">
-                  Revenue by Region
-                </p>
-                {data && data.revenue_by_region.length > 0 ? (
+                {data && data.monthly_revenue_trend.length > 0 ? (
                   <div className="h-56">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={data.revenue_by_region} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
+                      <AreaChart data={data.monthly_revenue_trend} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#1D9E75" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="#1D9E75" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
                         <CartesianGrid stroke="#1F2430" vertical={false} />
-                        <XAxis dataKey="label" stroke="#5B606C" fontSize={10} tickLine={false} axisLine={{ stroke: "#262B36" }} />
-                        <YAxis stroke="#5B606C" fontSize={10} tickLine={false} axisLine={false} width={44} />
-                        <Tooltip {...tooltipStyle} cursor={{ fill: "#1D9E75", opacity: 0.08 }} />
-                        <Bar dataKey="value" fill="#1D9E75" radius={[4, 4, 0, 0]} />
-                      </BarChart>
+                        <XAxis dataKey="label" stroke="#5B606C" fontSize={11} tickLine={false} axisLine={{ stroke: "#262B36" }} />
+                        <YAxis stroke="#5B606C" fontSize={11} tickLine={false} axisLine={false} width={44} />
+                        <Tooltip
+                          contentStyle={{ background: "#181C25", border: "1px solid #262B36", borderRadius: 10, fontSize: 12 }}
+                          labelStyle={{ color: "#9A9FAC" }}
+                          itemStyle={{ color: "#EDECE6" }}
+                        />
+                        <Area type="monotone" dataKey="value" stroke="#1D9E75" strokeWidth={2.5} fill="url(#trendFill)" />
+                      </AreaChart>
                     </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-sm text-ink-muted italic">No time-series data available yet.</p>
+                )}
+              </div>
+            )}
+
+            {loading ? (
+              <CardSkeleton />
+            ) : (
+              <div id="categories" className="rounded-2xl border border-ledger-border bg-ledger-card p-6">
+                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-muted mb-4">
+                  Revenue mix by category
+                </p>
+                {data && data.revenue_by_category.length > 0 ? (
+                  <>
+                    <div className="h-40 relative">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={data.revenue_by_category}
+                            dataKey="value"
+                            nameKey="label"
+                            innerRadius="65%"
+                            outerRadius="100%"
+                            paddingAngle={3}
+                            stroke="none"
+                          >
+                            {data.revenue_by_category.map((_, i) => (
+                              <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <p className="font-display text-lg font-semibold text-ink-primary">
+                          {formatCurrency(categoryTotal)}
+                        </p>
+                        <p className="text-[11px] text-ink-muted">total</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {data.revenue_by_category.map((p, i) => (
+                        <div key={p.label} className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-2 text-ink-secondary">
+                            <span className="h-2 w-2 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
+                            {p.label}
+                          </span>
+                          <span className="font-medium text-ink-primary">
+                            {categoryTotal > 0 ? `${((p.value / categoryTotal) * 100).toFixed(0)}%` : "—"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-ink-muted italic">No category data available.</p>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Stat cards */}
+          <section className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {loading
+              ? Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
+              : statCards.map((card, i) => (
+                  <div key={card.label} className="rounded-2xl border border-ledger-border bg-ledger-card p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[11px] uppercase tracking-[0.1em] text-ink-muted">{card.label}</p>
+                      <span className="h-2 w-2 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
+                    </div>
+                    <p className="font-display text-2xl font-semibold text-ink-primary">{card.value}</p>
+                  </div>
+                ))}
+          </section>
+
+          {/* Regional + category detail */}
+          <section className="grid md:grid-cols-2 gap-4">
+            {loading ? (
+              <CardSkeleton />
+            ) : (
+              <div id="regional" className="rounded-2xl border border-ledger-border bg-ledger-card p-6">
+                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-muted mb-4">
+                  Revenue by region
+                </p>
+                {data && data.revenue_by_region.length > 0 ? (
+                  <div className="space-y-4">
+                    {data.revenue_by_region.map((p, i) => (
+                      <div key={p.label}>
+                        <div className="flex items-center justify-between text-sm mb-1.5">
+                          <span className="text-ink-primary font-medium">{p.label}</span>
+                          <span className="text-ink-secondary">{formatCurrency(p.value)}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-ledger-surface overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${(p.value / regionMax) * 100}%`, background: PALETTE[i % PALETTE.length] }}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <p className="text-sm text-ink-muted italic">No regional data available.</p>
                 )}
               </div>
+            )}
 
-              <div className="rounded-xl border border-ledger-border bg-ledger-card p-5">
-                <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-muted mb-4">
-                  Revenue by Category
+            {loading ? (
+              <CardSkeleton />
+            ) : (
+              <div className="rounded-2xl border border-ledger-border bg-ledger-card p-6">
+                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-muted mb-4">
+                  Category breakdown
                 </p>
                 {data && data.revenue_by_category.length > 0 ? (
-                  <div className="h-56">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={data.revenue_by_category} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
-                        <CartesianGrid stroke="#1F2430" vertical={false} />
-                        <XAxis dataKey="label" stroke="#5B606C" fontSize={10} tickLine={false} axisLine={{ stroke: "#262B36" }} />
-                        <YAxis stroke="#5B606C" fontSize={10} tickLine={false} axisLine={false} width={44} />
-                        <Tooltip {...tooltipStyle} cursor={{ fill: "#BA7517", opacity: 0.08 }} />
-                        <Bar dataKey="value" fill="#BA7517" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-[11px] uppercase tracking-wide text-ink-muted">
+                        <th className="pb-2 font-medium">Category</th>
+                        <th className="pb-2 font-medium text-right">Revenue</th>
+                        <th className="pb-2 font-medium text-right">Share</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.revenue_by_category.map((p, i) => (
+                        <tr key={p.label} className="border-t border-ledger-hairline">
+                          <td className="py-2.5 text-ink-primary flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
+                            {p.label}
+                          </td>
+                          <td className="py-2.5 text-right text-ink-secondary">{formatCurrency(p.value)}</td>
+                          <td className="py-2.5 text-right text-ink-primary font-medium">
+                            {categoryTotal > 0 ? `${((p.value / categoryTotal) * 100).toFixed(1)}%` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 ) : (
                   <p className="text-sm text-ink-muted italic">No category data available.</p>
                 )}
               </div>
-            </>
-          )}
-        </section>
-
-        {/* Monthly trend */}
-        <section className="mb-8">
-          {loading ? (
-            <ChartCardSkeleton title="Monthly Revenue Trend" />
-          ) : (
-            <div className="rounded-xl border border-ledger-border bg-ledger-card p-5">
-              <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-muted mb-4">
-                Monthly Revenue Trend
-              </p>
-              {data && data.monthly_revenue_trend.length > 0 ? (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data.monthly_revenue_trend} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
-                      <CartesianGrid stroke="#1F2430" vertical={false} />
-                      <XAxis dataKey="label" stroke="#5B606C" fontSize={10} tickLine={false} axisLine={{ stroke: "#262B36" }} />
-                      <YAxis stroke="#5B606C" fontSize={10} tickLine={false} axisLine={false} width={44} />
-                      <Tooltip {...tooltipStyle} />
-                      <Line type="monotone" dataKey="value" stroke="#1D9E75" strokeWidth={2} dot={{ r: 3, fill: "#1D9E75" }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <p className="text-sm text-ink-muted italic">No time-series data available yet.</p>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Bottom CTA into the chat bot */}
-        <section className="rounded-xl border border-dashed border-seal-teal/40 bg-seal-teal/5 p-6 flex items-center justify-between gap-6 flex-wrap">
-          <div>
-            <p className="font-display text-lg font-semibold text-ink-primary mb-1">
-              Have a specific question?
-            </p>
-            <p className="text-sm text-ink-secondary max-w-md">
-              Ask MetricMind in plain English — every answer is computed from a
-              governed metric, with a full query trace behind it.
-            </p>
-          </div>
-          <Link
-            href="/chat"
-            className="shrink-0 rounded-lg bg-seal-teal px-5 py-3 font-medium text-ledger-bg hover:bg-seal-tealDark transition-colors"
-          >
-            Open the chat bot →
-          </Link>
-        </section>
+            )}
+          </section>
+        </main>
       </div>
-    </main>
+    </div>
   );
 }
