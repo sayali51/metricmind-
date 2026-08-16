@@ -62,24 +62,24 @@ consistent, auditable answer with a full trace of which tool ran.
 
 ```
 ┌───────────────────────────────────────────┐
-│         Next.js frontend (dark theme)      │
-│   📊 Dashboard (/)     💬 Chat (/chat)      │
-│      shared Sidebar + Topbar shell          │
+│         Next.js frontend (dark theme)     │
+│     Dashboard (/)       Chat (/chat)      │
+│      shared Sidebar + Topbar shell        │
 └───────────────────┬───────────────────────┘
                      │  fetch() — JSON over HTTP
                      ▼
 ┌───────────────────────────────────────────┐
-│           FastAPI backend (api/main.py)     │
-│   GET  /api/dashboard    POST /api/chat     │
-│     (thin wrapper — no agent logic here)    │
+│           FastAPI backend (api/main.py)   │
+│   GET  /api/dashboard    POST /api/chat   │
+│     (thin wrapper — no agent logic here)  │
 └───────────────────┬───────────────────────┘
                      │
        ┌─────────────┴──────────────┐
-       │                             │
+       │                            │
 dashboard_data.py             query_engine.py
 (direct Cube queries           (LangChain + Groq
  for charts/KPIs)               agent picks a tool)
-       │                             │
+       │                            │
        └─────────────┬──────────────┘
                      │
              Cube.dev REST API
@@ -213,7 +213,7 @@ CUBE_API_TOKEN=
 
 ## Features
 
-**📊 Dashboard (`/`)**
+** Dashboard (`/`)**
 
 - KPI cards: total revenue, profit, orders, profit margin
 - Revenue trend over time (area chart)
@@ -222,7 +222,7 @@ CUBE_API_TOKEN=
 - All data pulled live from Cube.dev via `/api/dashboard` — nothing
   hardcoded in the frontend
 
-**💬 Chat (`/chat`)**
+** Chat (`/chat`)**
 
 - Ask any governed-metric question in plain English
 - Full audit trail — every answer shows exactly which governed metric
@@ -267,13 +267,13 @@ npx tsc --noEmit
 
 ## Status
 
-- ✅ Cube.dev semantic layer — deployed on **Cube Cloud**, connected to
+-  Cube.dev semantic layer — deployed on **Cube Cloud**, connected to
   **Neon** (cloud Postgres), verified via curl and live tests
-- ✅ LangChain + Groq agent — connected to the deployed Cube REST API
-- ✅ FastAPI bridge — `/api/dashboard` and `/api/chat`, both tested
+-  LangChain + Groq agent — connected to the deployed Cube REST API
+- FastAPI bridge — `/api/dashboard` and `/api/chat`, both tested
   against a running frontend
-- ✅ Next.js frontend — Dashboard and Chat pages on a shared dark shell
-- ✅ Automated tests — unit (mocked) + live integration, all passing
+-  Next.js frontend — Dashboard and Chat pages on a shared dark shell
+-  Automated tests — unit (mocked) + live integration, all passing
   against the cloud deployment
 
 ## Notes for the Team
