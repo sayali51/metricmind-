@@ -3,9 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/* ---------------------------------- Icons ---------------------------------- */
-/* Small inline icon set, shared by the sidebar/topbar — no extra dependency. */
-
 export function IconGrid(props: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={props.className}>
@@ -24,18 +21,6 @@ export function IconChat(props: { className?: string }) {
         d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8A2.5 2.5 0 0 1 17.5 16H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 13.5v-8Z"
         fill="currentColor"
       />
-    </svg>
-  );
-}
-
-export function IconBell(props: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
-      <path
-        d="M12 3a5 5 0 0 0-5 5v3.2c0 .6-.24 1.18-.66 1.6L5 14.3c-.7.7-.2 1.9.78 1.9h12.44c.98 0 1.48-1.2.78-1.9l-1.34-1.5a2.27 2.27 0 0 1-.66-1.6V8a5 5 0 0 0-5-5Z"
-        fill="currentColor"
-      />
-      <circle cx="12" cy="20" r="1.8" fill="currentColor" />
     </svg>
   );
 }
@@ -62,9 +47,6 @@ export function IconSpark(props: { className?: string }) {
   );
 }
 
-/* --------------------------------- Sidebar --------------------------------- */
-/* Exactly one link into the chat bot lives here — pages should not add their
-   own "go to chat" buttons or CTAs on top of this. */
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/", icon: IconGrid },
@@ -190,14 +172,6 @@ export function Topbar({
           <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-seal-teal">{eyebrow}</p>
           <h1 className="font-display text-lg font-semibold text-ink-primary leading-tight">{title}</h1>
         </div>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <button className="rounded-full p-2 text-ink-secondary hover:bg-ledger-surface relative" aria-label="Notifications">
-          <IconBell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-seal-teal" />
-        </button>
-        <div className="h-8 w-8 rounded-full bg-ledger-surface border border-ledger-border" />
       </div>
     </div>
   );

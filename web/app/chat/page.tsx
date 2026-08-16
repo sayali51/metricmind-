@@ -435,14 +435,7 @@ export default function Home() {
         <Topbar eyebrow="Agentic BI" title="Ask MetricMind" onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="flex-1 px-6 py-8 max-w-3xl w-full mx-auto">
-        <p className="text-ink-secondary leading-relaxed max-w-xl mb-8">
-          Ask a business question in plain English and get back a number that's
-          always mathematically consistent — every answer is computed from one
-          governed metric definition in Cube.dev, never guessed by the LLM, with
-          a full audit trail underneath.
-        </p>
 
-        {/* How it works */}
         <section id="how-it-works" className="mb-8 rounded-xl border border-ledger-border bg-ledger-card p-5">
           <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-muted mb-4">
             How it works
