@@ -1,616 +1,370 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   PieChart,
   Pie,
   Cell,
-  ScatterChart,
-  Scatter,
   XAxis,
   YAxis,
-  ZAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
 } from "recharts";
+import { Sidebar, Topbar, type AnchorItem } from "./components/Shell";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-const EXAMPLE_QUESTIONS = [
-  "What's total sales in South?",
-  "What's total profit in North?",
-  "How many high value orders are there?",
-  "How many loss-making orders are there?",
-  "What's the overall profit margin?",
-  "Why is profit low in the Central region?",
-];
-
-const HOW_IT_WORKS = [
-  {
-    step: "01",
-    title: "Ask in plain English",
-    body: "Type a business question — no SQL, no dashboard filters.",
-  },
-  {
-    step: "02",
-    title: "Agent picks a governed tool",
-    body: "A LangChain + Groq agent maps your question to one metric tool.",
-  },
-  {
-    step: "03",
-    title: "Cube.dev computes it",
-    body: "The semantic layer runs it against Postgres from a single shared definition.",
-  },
-  {
-    step: "04",
-    title: "You get answer + proof",
-    body: "The number comes back with the exact query trace behind it.",
-  },
-];
-
-const STACK = ["Cube.dev semantic layer", "LangChain + Groq agent", "FastAPI", "Next.js"];
-
-type TraceStep = {
-  name: string;
-  args: Record<string, unknown>;
-  result: string;
-};
-
-type ChatResult = {
-  answer: string;
-  tool_used: boolean;
-  trace: TraceStep[];
-};
-
-type HistoryItem = {
-  question: string;
-  result: ChatResult;
-};
-
 type ChartPoint = { label: string; value: number };
-type ScatterPoint = { x: number; y: number };
 
-type ChartData =
-  | { kind: "trend"; points: ChartPoint[] }
-  | { kind: "distribution"; points: ChartPoint[] }
-  | { kind: "correlation"; points: ScatterPoint[]; xLabel: string; yLabel: string };
+type Kpis = {
+  revenue?: number;
+  profit?: number;
+  orders?: number;
+  high_value_orders?: number;
+  loss_orders?: number;
+  profit_margin?: number;
+};
 
-const NUMERIC_KEY_HINTS = /revenue|profit|sales|value|margin|orders|count/;
-const DATE_KEY_HINTS = /date|month|day|year|time/;
+type DashboardData = {
+  kpis: Kpis;
+  revenue_by_region: ChartPoint[];
+  revenue_by_category: ChartPoint[];
+  monthly_revenue_trend: ChartPoint[];
+  error: string | null;
+};
 
-const PIE_COLORS = ["#1D9E75", "#2FB88F", "#5FCBA8", "#8FD9C1", "#B7E6D8", "#D9A441", "#C97A3D"];
+const PALETTE = ["#1D9E75", "#BA7517", "#5B8DEF", "#B968E0", "#E0577B", "#3FB6C9"];
 
-function titleCase(key: string): string {
-  return key.charAt(0).toUpperCase() + key.slice(1);
+function formatCurrency(n: number | undefined): string {
+  if (n === undefined) return "—";
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-type ParsedField = { key: string; raw: string; cleaned: string; numeric: number; looksNumeric: boolean };
-
-function parseField(field: string): ParsedField | null {
-  const sepIdx = field.indexOf(":");
-  if (sepIdx === -1) return null;
-  const key = field.slice(0, sepIdx).trim().toLowerCase();
-  const raw = field.slice(sepIdx + 1).trim();
-  const cleaned = raw.replace(/[^0-9.-]/g, "");
-  const numeric = Number(cleaned);
-  const looksNumeric = cleaned.length > 0 && !Number.isNaN(numeric);
-  return { key, raw, cleaned, numeric, looksNumeric };
+function formatNumber(n: number | undefined): string {
+  if (n === undefined) return "—";
+  return n.toLocaleString();
 }
 
-// The API returns multi-row answers as "key: value, key2: value2; key: value, ...".
-// This is a best-effort parse of that shape into chartable data — if it doesn't
-// look like a multi-row breakdown, we just skip the chart and show the plain answer.
-//
-// Three shapes are recognized:
-//  - trend:       a labeled value per date/month -> line chart
-//  - distribution: a labeled value per category -> pie chart (or bar, via toggle)
-//  - correlation: two numeric fields per row, no label field -> scatter plot
-function parseChartData(answer: string): ChartData | null {
-  if (!answer.includes(";")) return null;
-
-  const rows = answer
-    .split(";")
-    .map((r) => r.trim())
-    .filter(Boolean);
-  if (rows.length < 2) return null;
-
-  // First pass: try to parse every row as a correlation candidate, i.e. exactly
-  // two fields, both numeric, neither a date. Only used if ALL rows qualify.
-  const scatterPoints: ScatterPoint[] = [];
-  let xKey: string | null = null;
-  let yKey: string | null = null;
-  let allRowsAreCorrelation = true;
-
-  for (const row of rows) {
-    const fields = row.split(",").map((f) => f.trim());
-    if (fields.length !== 2) {
-      allRowsAreCorrelation = false;
-      break;
-    }
-    const parsedFields = fields.map(parseField);
-    if (parsedFields.some((f) => f === null)) {
-      allRowsAreCorrelation = false;
-      break;
-    }
-    const [f1, f2] = parsedFields as ParsedField[];
-    const bothNumeric =
-      f1.looksNumeric && f2.looksNumeric && !DATE_KEY_HINTS.test(f1.key) && !DATE_KEY_HINTS.test(f2.key);
-    if (!bothNumeric) {
-      allRowsAreCorrelation = false;
-      break;
-    }
-    if (xKey === null) xKey = f1.key;
-    if (yKey === null) yKey = f2.key;
-    scatterPoints.push({ x: f1.numeric, y: f2.numeric });
-  }
-
-  if (allRowsAreCorrelation && scatterPoints.length >= 2 && xKey && yKey) {
-    return { kind: "correlation", points: scatterPoints, xLabel: titleCase(xKey), yLabel: titleCase(yKey) };
-  }
-
-  // Fall back to label/value parsing for trend or distribution charts.
-  const points: ChartPoint[] = [];
-  let isTrend = false;
-
-  for (const row of rows) {
-    const fields = row.split(",").map((f) => f.trim());
-    let label: string | null = null;
-    let value: number | null = null;
-
-    for (const field of fields) {
-      const parsed = parseField(field);
-      if (!parsed) continue;
-      const { key, raw, looksNumeric, numeric } = parsed;
-
-      if (looksNumeric && NUMERIC_KEY_HINTS.test(key) && value === null) {
-        value = numeric;
-      } else if (label === null) {
-        label = DATE_KEY_HINTS.test(key) ? raw.slice(0, 7) : raw;
-        if (DATE_KEY_HINTS.test(key)) isTrend = true;
-      }
-    }
-
-    if (label !== null && value !== null && !/^(none|null|undefined)$/i.test(label)) {
-      points.push({ label, value });
-    }
-  }
-
-  if (points.length < 2) return null;
-  return { kind: isTrend ? "trend" : "distribution", points };
+function formatPercent(n: number | undefined): string {
+  if (n === undefined) return "—";
+  return `${(n * 100).toFixed(1)}%`;
 }
 
-function SealIcon({ verified }: { verified: boolean }) {
+function IconTrend(props: { className?: string }) {
   return (
-    <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-      <polygon
-        points="17,1 24,4.5 30.5,10 32.5,17 30.5,24 24,29.5 17,33 10,29.5 3.5,24 1.5,17 3.5,10 10,4.5"
-        className={verified ? "fill-seal-teal/15 stroke-seal-teal" : "fill-ledger-card stroke-ledger-border"}
-        strokeWidth="1"
-      />
-      {verified ? (
-        <path
-          d="M11 17.5l4 4 8-8.5"
-          stroke="#1D9E75"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-      ) : (
-        <circle cx="17" cy="17" r="2.2" fill="#5B606C" />
-      )}
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path d="M3 17l6-6 4 4 8-9" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-const tooltipStyle = {
-  contentStyle: { background: "#181C25", border: "1px solid #262B36", borderRadius: 8, fontSize: 12 },
-  labelStyle: { color: "#9A9FAC" },
-  itemStyle: { color: "#EDECE6" },
-};
-
-function MetricChart({
-  data,
-  distributionView,
-  onToggleDistributionView,
-}: {
-  data: ChartData;
-  distributionView: "bar" | "pie";
-  onToggleDistributionView: () => void;
-}) {
+function IconPin(props: { className?: string }) {
   return (
-    <div className="mt-4 rounded-lg border border-ledger-hairline bg-ledger-surface p-3">
-      {data.kind === "distribution" && (
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[11px] font-mono uppercase tracking-wide text-ink-muted">Distribution</span>
-          <button
-            type="button"
-            onClick={onToggleDistributionView}
-            className="text-[11px] rounded-full border border-ledger-border px-2.5 py-1 text-ink-secondary hover:border-seal-teal/50 hover:text-ink-primary transition-colors"
-          >
-            {distributionView === "pie" ? "View as bar" : "View as pie"}
-          </button>
-        </div>
-      )}
-      {data.kind === "correlation" && (
-        <p className="mb-2 text-[11px] font-mono uppercase tracking-wide text-ink-muted">
-          Correlation: {data.xLabel} vs {data.yLabel}
-        </p>
-      )}
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Z" fill="currentColor" />
+      <circle cx="12" cy="9" r="2.5" fill="#181C25" />
+    </svg>
+  );
+}
 
-      <div className="h-48">
-        <ResponsiveContainer width="100%" height="100%">
-          {data.kind === "trend" ? (
-            <LineChart data={data.points} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
-              <CartesianGrid stroke="#1F2430" vertical={false} />
-              <XAxis dataKey="label" stroke="#5B606C" fontSize={10} tickLine={false} axisLine={{ stroke: "#262B36" }} />
-              <YAxis stroke="#5B606C" fontSize={10} tickLine={false} axisLine={false} width={44} />
-              <Tooltip {...tooltipStyle} />
-              <Line type="monotone" dataKey="value" stroke="#1D9E75" strokeWidth={2} dot={{ r: 3, fill: "#1D9E75" }} />
-            </LineChart>
-          ) : data.kind === "correlation" ? (
-            <ScatterChart margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
-              <CartesianGrid stroke="#1F2430" />
-              <XAxis
-                type="number"
-                dataKey="x"
-                name={data.xLabel}
-                stroke="#5B606C"
-                fontSize={10}
-                tickLine={false}
-                axisLine={{ stroke: "#262B36" }}
-              />
-              <YAxis
-                type="number"
-                dataKey="y"
-                name={data.yLabel}
-                stroke="#5B606C"
-                fontSize={10}
-                tickLine={false}
-                axisLine={false}
-                width={44}
-              />
-              <ZAxis range={[60, 60]} />
-              <Tooltip {...tooltipStyle} cursor={{ strokeDasharray: "3 3", stroke: "#262B36" }} />
-              <Scatter data={data.points} fill="#1D9E75" />
-            </ScatterChart>
-          ) : distributionView === "pie" ? (
-            <PieChart margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-              <Tooltip {...tooltipStyle} />
-              <Legend wrapperStyle={{ fontSize: 11, color: "#9A9FAC" }} />
-              <Pie
-                data={data.points}
-                dataKey="value"
-                nameKey="label"
-                cx="50%"
-                cy="50%"
-                outerRadius={64}
-                paddingAngle={2}
-              >
-                {data.points.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-            </PieChart>
-          ) : (
-            <BarChart data={data.points} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
-              <CartesianGrid stroke="#1F2430" vertical={false} />
-              <XAxis dataKey="label" stroke="#5B606C" fontSize={10} tickLine={false} axisLine={{ stroke: "#262B36" }} />
-              <YAxis stroke="#5B606C" fontSize={10} tickLine={false} axisLine={false} width={44} />
-              <Tooltip {...tooltipStyle} cursor={{ fill: "#1D9E75", opacity: 0.08 }} />
-              <Bar dataKey="value" fill="#1D9E75" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          )}
-        </ResponsiveContainer>
-      </div>
+function IconTag(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={props.className}>
+      <path d="M3 12.5 12.5 3H19a2 2 0 0 1 2 2v6.5L11.5 21 3 12.5Z" fill="currentColor" />
+      <circle cx="16" cy="8" r="1.6" fill="#181C25" />
+    </svg>
+  );
+}
+
+const ANCHOR_ITEMS: AnchorItem[] = [
+  { label: "Revenue trend", href: "#trend", icon: IconTrend },
+  { label: "Regional split", href: "#regional", icon: IconPin },
+  { label: "Categories", href: "#categories", icon: IconTag },
+];
+
+/* ------------------------------- Skeletons ------------------------------- */
+
+function CardSkeleton({ className = "" }: { className?: string }) {
+  return (
+    <div className={`rounded-2xl border border-ledger-border bg-ledger-card p-5 animate-pulse ${className}`}>
+      <div className="h-3 w-24 bg-ledger-surface rounded mb-3" />
+      <div className="h-7 w-28 bg-ledger-surface rounded mb-4" />
+      <div className="h-40 rounded-xl bg-ledger-surface" />
     </div>
   );
 }
 
-// Fake trend data in the same "key: value, key2: value2; ..." shape the API
-// returns, so you can confirm the chart renders correctly without depending
-// on the LLM agent actually picking tool_monthly_sales_trend.
-const SAMPLE_TREND_ANSWER =
-  "month: 2023-01, revenue: 12500; month: 2023-02, revenue: 14200; " +
-  "month: 2023-03, revenue: 9800; month: 2023-04, revenue: 17650; " +
-  "month: 2023-05, revenue: 15300; month: 2023-06, revenue: 19200";
+function StatCardSkeleton() {
+  return <div className="rounded-2xl bg-ledger-card border border-ledger-border p-5 h-[104px] animate-pulse" />;
+}
 
-// Fake distribution data (category breakdown, no date field) to preview the pie chart.
-const SAMPLE_DISTRIBUTION_ANSWER =
-  "region: North, sales: 42000; region: South, sales: 31500; " +
-  "region: East, sales: 27800; region: West, sales: 19600; " +
-  "region: Central, sales: 15200";
+/* --------------------------------- Page --------------------------------- */
 
-// Fake correlation data (two numeric fields, no label field) to preview the scatter plot.
-const SAMPLE_CORRELATION_ANSWER =
-  "sales: 12000, profit: 1800; sales: 18500, profit: 3100; " +
-  "sales: 9800, profit: 900; sales: 24500, profit: 5200; " +
-  "sales: 15300, profit: 2400; sales: 21000, profit: 1200; " +
-  "sales: 27800, profit: 6100; sales: 13400, profit: 2000";
+export default function DashboardPage() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-export default function Home() {
-  const [question, setQuestion] = useState("");
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [openTrace, setOpenTrace] = useState<number | null>(null);
-  const [distributionViews, setDistributionViews] = useState<Record<number, "bar" | "pie">>({});
+  useEffect(() => {
+    let cancelled = false;
 
-  function previewSample(label: string, toolName: string, answer: string) {
-    setHistory((prev) => [
-      {
-        question: `[Preview] ${label} — not from the live API`,
-        result: {
-          answer,
-          tool_used: true,
-          trace: [{ name: toolName, args: {}, result: answer }],
-        },
-      },
-      ...prev,
-    ]);
-  }
-
-  function previewSampleChart() {
-    previewSample("Sample monthly trend", "tool_monthly_sales_trend", SAMPLE_TREND_ANSWER);
-  }
-
-  function previewSampleDistribution() {
-    previewSample("Sample regional distribution", "tool_sales_by_region", SAMPLE_DISTRIBUTION_ANSWER);
-  }
-
-  function previewSampleCorrelation() {
-    previewSample("Sample sales vs. profit correlation", "tool_sales_profit_pairs", SAMPLE_CORRELATION_ANSWER);
-  }
-
-  async function runQuery(q: string) {
-    const trimmed = q.trim();
-    if (!trimmed || loading) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch(`${API_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: trimmed }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`API responded with ${res.status}`);
+    async function loadDashboard() {
+      setLoading(true);
+      setFetchError(null);
+      try {
+        const res = await fetch(`${API_URL}/api/dashboard`);
+        if (!res.ok) throw new Error(`API responded with ${res.status}`);
+        const json: DashboardData = await res.json();
+        if (!cancelled) setData(json);
+      } catch (err) {
+        if (!cancelled) {
+          setFetchError(
+            err instanceof Error
+              ? `Couldn't reach the MetricMind API: ${err.message}`
+              : "Couldn't reach the MetricMind API."
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      const data: ChatResult = await res.json();
-      setHistory((prev) => [{ question: trimmed, result: data }, ...prev]);
-      setQuestion("");
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? `Couldn't reach the MetricMind API: ${err.message}`
-          : "Couldn't reach the MetricMind API."
-      );
-    } finally {
-      setLoading(false);
     }
-  }
+
+    loadDashboard();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const backendError = data?.error ?? null;
+  const showError = fetchError || backendError;
+  const kpis = data?.kpis ?? {};
+
+  const categoryTotal = useMemo(
+    () => (data?.revenue_by_category ?? []).reduce((sum, p) => sum + p.value, 0),
+    [data]
+  );
+  const regionMax = useMemo(
+    () => Math.max(1, ...(data?.revenue_by_region ?? []).map((p) => p.value)),
+    [data]
+  );
+
+  const statCards = [
+    { label: "Total Revenue", value: formatCurrency(kpis.revenue) },
+    { label: "Total Profit", value: formatCurrency(kpis.profit) },
+    { label: "Total Orders", value: formatNumber(kpis.orders) },
+    { label: "Profit Margin", value: formatPercent(kpis.profit_margin) },
+  ];
 
   return (
-    <main className="min-h-screen bg-ledger-bg">
-      <div className="mx-auto max-w-3xl px-6 py-16">
-        {/* Header */}
-        <header className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <SealIcon verified />
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-seal-teal">
-              Governed metrics chat · Agentic BI
-            </p>
-          </div>
-          <h1 className="font-display text-4xl font-semibold text-ink-primary mb-3">
-            MetricMind
-          </h1>
-          <p className="text-ink-secondary leading-relaxed max-w-xl">
-            Ask a business question in plain English and get back a number that's
-            always mathematically consistent — every answer is computed from one
-            governed metric definition in Cube.dev, never guessed by the LLM, with
-            a full audit trail underneath.
-          </p>
-        </header>
+    <div className="min-h-screen bg-ledger-bg flex">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} anchorItems={ANCHOR_ITEMS} />
 
-        {/* How it works */}
-        <section className="mb-8 rounded-xl border border-ledger-border bg-ledger-card p-5">
-          <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-ink-muted mb-4">
-            How it works
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {HOW_IT_WORKS.map((s) => (
-              <div key={s.step}>
-                <p className="font-mono text-xs text-seal-teal mb-1.5">{s.step}</p>
-                <p className="text-sm font-medium text-ink-primary mb-1">{s.title}</p>
-                <p className="text-xs text-ink-secondary leading-relaxed">{s.body}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-5 pt-4 border-t border-ledger-hairline flex flex-wrap gap-2">
-            {STACK.map((s) => (
-              <span
-                key={s}
-                className="text-[11px] rounded-full border border-ledger-border bg-ledger-surface px-2.5 py-1 text-ink-muted"
-              >
-                {s}
-              </span>
-            ))}
-          </div>
-        </section>
+      <div className="flex-1 min-w-0 flex flex-col">
+        <Topbar eyebrow="Agentic BI" title="Dashboard" onMenuClick={() => setSidebarOpen(true)} />
 
-        {/* Ask form */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            runQuery(question);
-          }}
-          className="mb-4"
-        >
-          <label htmlFor="question" className="sr-only">
-            Ask a question
-          </label>
-          <div className="flex gap-3">
-            <input
-              id="question"
-              type="text"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="What's total profit in North?"
-              className="flex-1 rounded-lg bg-ledger-surface border border-ledger-border px-4 py-3 text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-seal-teal/50"
-            />
-            <button
-              type="submit"
-              disabled={loading || !question.trim()}
-              className="rounded-lg bg-seal-teal px-5 py-3 font-medium text-ledger-bg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-seal-tealDark transition-colors"
-            >
-              {loading ? "Running…" : "Run query"}
-            </button>
-          </div>
-        </form>
+        <main className="flex-1 px-5 py-6 max-w-6xl w-full mx-auto">
+          {showError && (
+            <div className="mb-5 rounded-xl border border-seal-amber/40 bg-seal-amber/10 px-4 py-3 text-sm text-seal-amber">
+              ⚠️ {fetchError || backendError}
+            </div>
+          )}
 
-        <div className="flex flex-wrap gap-2 mb-3">
-          {EXAMPLE_QUESTIONS.map((q) => (
-            <button
-              key={q}
-              onClick={() => runQuery(q)}
-              disabled={loading}
-              className="text-xs rounded-full border border-ledger-border bg-ledger-surface px-3 py-1.5 text-ink-secondary hover:border-seal-teal/50 hover:text-ink-primary transition-colors disabled:opacity-40"
-            >
-              {q}
-            </button>
-          ))}
-        </div>
-
-        {/* Dev aid: lets you confirm the chart component renders correctly
-            without depending on the backend/agent picking the trend tool.
-            Safe to delete once the agent reliably returns trend data. */}
-        <div className="mb-10 flex flex-wrap gap-2">
-          <button
-            onClick={previewSampleChart}
-            className="text-xs rounded-full border border-dashed border-seal-amber/50 bg-seal-amber/5 px-3 py-1.5 text-seal-amber hover:bg-seal-amber/10 transition-colors"
-          >
-            ⚡ Preview trend (line)
-          </button>
-          <button
-            onClick={previewSampleDistribution}
-            className="text-xs rounded-full border border-dashed border-seal-amber/50 bg-seal-amber/5 px-3 py-1.5 text-seal-amber hover:bg-seal-amber/10 transition-colors"
-          >
-            ⚡ Preview distribution (pie)
-          </button>
-          <button
-            onClick={previewSampleCorrelation}
-            className="text-xs rounded-full border border-dashed border-seal-amber/50 bg-seal-amber/5 px-3 py-1.5 text-seal-amber hover:bg-seal-amber/10 transition-colors"
-          >
-            ⚡ Preview correlation (scatter)
-          </button>
-        </div>
-
-        {error && (
-          <div className="mb-6 rounded-lg border border-seal-amber/40 bg-seal-amber/10 px-4 py-3 text-sm text-seal-amber">
-            {error}
-          </div>
-        )}
-
-        {history.length === 0 && !error && (
-          <p className="text-sm text-ink-muted italic">
-            No questions yet — try one of the suggestions above, or type your own.
-          </p>
-        )}
-
-        <div className="space-y-4">
-          {history.map((item, idx) => {
-            const isVerified = item.result.tool_used;
-            const traceOpen = openTrace === idx;
-            const chart = parseChartData(item.result.answer);
-            const distributionView =
-              distributionViews[idx] ?? (chart && chart.kind === "distribution" && chart.points.length <= 6 ? "pie" : "bar");
-
-            return (
-              <div
-                key={idx}
-                className="rounded-xl border border-ledger-border bg-ledger-card p-5"
-              >
-                <p className="text-sm text-ink-secondary mb-4">{item.question}</p>
-
-                <div className="flex items-start gap-3">
-                  <SealIcon verified={isVerified} />
-                  <div className="flex-1">
-                    {!chart && (
-                      <p className="font-mono text-2xl font-medium text-ink-primary">
-                        {item.result.answer}
-                      </p>
-                    )}
-                    {chart && chart.kind !== "correlation" && (
-                      <p className="font-mono text-sm text-ink-primary">
-                        Breakdown across {chart.points.length} {chart.kind === "trend" ? "periods" : "categories"}
-                      </p>
-                    )}
-                    {chart && chart.kind === "correlation" && (
-                      <p className="font-mono text-sm text-ink-primary">
-                        {chart.points.length} paired data points
-                      </p>
-                    )}
-                    <p className="text-xs text-ink-muted mt-1">
-                      {item.result.trace.length === 0
-                        ? "No governed metric was used for this answer"
-                        : item.result.trace.length === 1
-                        ? `Calculated using governed metric: ${item.result.trace[0].name}`
-                        : `Drilled down using ${item.result.trace.length} governed metrics`}
+          {/* Hero row: trend + category mix */}
+          <section id="trend" className="grid lg:grid-cols-[1.4fr_1fr] gap-4 mb-4">
+            {loading ? (
+              <CardSkeleton />
+            ) : (
+              <div className="rounded-2xl border border-ledger-border bg-ledger-card p-6">
+                <div className="flex items-start justify-between mb-5">
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-muted mb-1">
+                      Revenue overview
+                    </p>
+                    <p className="font-display text-3xl font-semibold text-ink-primary">
+                      {formatCurrency(kpis.revenue)}
+                    </p>
+                    <p className="text-sm text-ink-secondary mt-1">
+                      {formatNumber(kpis.orders)} orders across the period
                     </p>
                   </div>
+                  <span className="rounded-full bg-seal-teal/10 px-3 py-1 text-xs font-medium text-seal-teal">
+                    Monthly
+                  </span>
                 </div>
 
-                {chart && (
-                  <MetricChart
-                    data={chart}
-                    distributionView={distributionView}
-                    onToggleDistributionView={() =>
-                      setDistributionViews((prev) => ({
-                        ...prev,
-                        [idx]: distributionView === "pie" ? "bar" : "pie",
-                      }))
-                    }
-                  />
+                {data && data.monthly_revenue_trend.length > 0 ? (
+                  <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={data.monthly_revenue_trend} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#1D9E75" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="#1D9E75" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid stroke="#1F2430" vertical={false} />
+                        <XAxis dataKey="label" stroke="#5B606C" fontSize={11} tickLine={false} axisLine={{ stroke: "#262B36" }} />
+                        <YAxis stroke="#5B606C" fontSize={11} tickLine={false} axisLine={false} width={44} />
+                        <Tooltip
+                          contentStyle={{ background: "#181C25", border: "1px solid #262B36", borderRadius: 10, fontSize: 12 }}
+                          labelStyle={{ color: "#9A9FAC" }}
+                          itemStyle={{ color: "#EDECE6" }}
+                        />
+                        <Area type="monotone" dataKey="value" stroke="#1D9E75" strokeWidth={2.5} fill="url(#trendFill)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-sm text-ink-muted italic">No time-series data available yet.</p>
                 )}
+              </div>
+            )}
 
-                {item.result.trace.length > 0 && (
-                  <button
-                    onClick={() => setOpenTrace(traceOpen ? null : idx)}
-                    className="mt-4 text-xs font-mono text-seal-teal hover:text-seal-tealDark transition-colors"
-                  >
-                    {traceOpen ? "▾ Hide query trace" : "▸ View query trace"}
-                  </button>
-                )}
-
-                {traceOpen && (
-                  <div className="mt-3 space-y-2 border-t border-ledger-hairline pt-3">
-                    {item.result.trace.map((step, i) => (
-                      <div key={i} className="rounded-md bg-ledger-surface p-3">
-                        <p className="font-mono text-xs text-seal-amber mb-1">
-                          Step {i + 1}: {step.name}
+            {loading ? (
+              <CardSkeleton />
+            ) : (
+              <div id="categories" className="rounded-2xl border border-ledger-border bg-ledger-card p-6">
+                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-muted mb-4">
+                  Revenue mix by category
+                </p>
+                {data && data.revenue_by_category.length > 0 ? (
+                  <>
+                    <div className="h-40 relative">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={data.revenue_by_category}
+                            dataKey="value"
+                            nameKey="label"
+                            innerRadius="65%"
+                            outerRadius="100%"
+                            paddingAngle={3}
+                            stroke="none"
+                          >
+                            {data.revenue_by_category.map((_, i) => (
+                              <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
+                            ))}
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <p className="font-display text-lg font-semibold text-ink-primary">
+                          {formatCurrency(categoryTotal)}
                         </p>
-                        <pre className="font-mono text-xs text-ink-secondary whitespace-pre-wrap break-all">
-                          {JSON.stringify({ args: step.args, result: step.result }, null, 2)}
-                        </pre>
+                        <p className="text-[11px] text-ink-muted">total</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {data.revenue_by_category.map((p, i) => (
+                        <div key={p.label} className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-2 text-ink-secondary">
+                            <span className="h-2 w-2 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
+                            {p.label}
+                          </span>
+                          <span className="font-medium text-ink-primary">
+                            {categoryTotal > 0 ? `${((p.value / categoryTotal) * 100).toFixed(0)}%` : "—"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-ink-muted italic">No category data available.</p>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Stat cards */}
+          <section className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {loading
+              ? Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
+              : statCards.map((card, i) => (
+                  <div key={card.label} className="rounded-2xl border border-ledger-border bg-ledger-card p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[11px] uppercase tracking-[0.1em] text-ink-muted">{card.label}</p>
+                      <span className="h-2 w-2 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
+                    </div>
+                    <p className="font-display text-2xl font-semibold text-ink-primary">{card.value}</p>
+                  </div>
+                ))}
+          </section>
+
+          {/* Regional + category detail */}
+          <section className="grid md:grid-cols-2 gap-4">
+            {loading ? (
+              <CardSkeleton />
+            ) : (
+              <div id="regional" className="rounded-2xl border border-ledger-border bg-ledger-card p-6">
+                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-muted mb-4">
+                  Revenue by region
+                </p>
+                {data && data.revenue_by_region.length > 0 ? (
+                  <div className="space-y-4">
+                    {data.revenue_by_region.map((p, i) => (
+                      <div key={p.label}>
+                        <div className="flex items-center justify-between text-sm mb-1.5">
+                          <span className="text-ink-primary font-medium">{p.label}</span>
+                          <span className="text-ink-secondary">{formatCurrency(p.value)}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-ledger-surface overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${(p.value / regionMax) * 100}%`, background: PALETTE[i % PALETTE.length] }}
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <p className="text-sm text-ink-muted italic">No regional data available.</p>
                 )}
               </div>
-            );
-          })}
-        </div>
+            )}
+
+            {loading ? (
+              <CardSkeleton />
+            ) : (
+              <div className="rounded-2xl border border-ledger-border bg-ledger-card p-6">
+                <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-muted mb-4">
+                  Category breakdown
+                </p>
+                {data && data.revenue_by_category.length > 0 ? (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-[11px] uppercase tracking-wide text-ink-muted">
+                        <th className="pb-2 font-medium">Category</th>
+                        <th className="pb-2 font-medium text-right">Revenue</th>
+                        <th className="pb-2 font-medium text-right">Share</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.revenue_by_category.map((p, i) => (
+                        <tr key={p.label} className="border-t border-ledger-hairline">
+                          <td className="py-2.5 text-ink-primary flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
+                            {p.label}
+                          </td>
+                          <td className="py-2.5 text-right text-ink-secondary">{formatCurrency(p.value)}</td>
+                          <td className="py-2.5 text-right text-ink-primary font-medium">
+                            {categoryTotal > 0 ? `${((p.value / categoryTotal) * 100).toFixed(1)}%` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-sm text-ink-muted italic">No category data available.</p>
+                )}
+              </div>
+            )}
+          </section>
+        </main>
       </div>
-    </main>
+    </div>
   );
 }
